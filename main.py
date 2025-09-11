@@ -1,13 +1,14 @@
+# main.py
 import discord
 import os
 import json
 from discord.ext import commands
-from dotenv import load_dotenv # Notun import
+from dotenv import load_dotenv # Importing dotenv
 
-# --- .env file theke environment variables load kora hocche ---
+# --- Loading environment variables from .env file ---
 load_dotenv()
 
-# --- BOT TOKEN EKHON ENVIRONMENT VARIABLE THEKE NEWYA HOCCHE ---
+# --- BOT TOKEN IS NOW BEING PULLED FROM ENVIRONMENT VARIABLES ---
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("DISCORD_TOKEN not found! Please set it in your .env file or environment variables.")
@@ -17,7 +18,7 @@ intents.messages = True
 intents.guilds = True
 intents.members = True
 
-# Ticket system er jonno persistent view gulo import kora hocche
+# Importing persistent views for the ticket system
 from cogs.ticket_system import TicketCreateView, TicketCloseView
 
 class MyClient(commands.Bot):
@@ -26,7 +27,7 @@ class MyClient(commands.Bot):
         self.permissions_filepath = "permissions.json"
         self.permissions = self.load_permissions()
 
-    # --- NOTUN PERMISSION FUNCTIONS ---
+    # --- Permission Functions ---
     def load_permissions(self):
         if not os.path.exists(self.permissions_filepath):
             with open(self.permissions_filepath, 'w') as f:
@@ -49,8 +50,14 @@ class MyClient(commands.Bot):
                 print(f"{filename} has been loaded.")
     
     async def on_ready(self):
+        # --- NEW BOT STATUS SET ---
+        # This status will be displayed as soon as the bot logs in
+        game = discord.Game("Startup Bangladesh")
+        await self.change_presence(status=discord.Status.online, activity=game)
+        
         await self.tree.sync()
         print(f'Logged in as {self.user} and all commands are synced.')
 
 client = MyClient()
 client.run(BOT_TOKEN)
+
