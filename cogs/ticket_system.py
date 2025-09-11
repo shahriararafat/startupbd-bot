@@ -39,7 +39,7 @@ def get_report_embed():
     return embed
 
 def get_middleman_embed():
-    # Notun Middleman request er jonno embed
+    # Middleman request er jonno embed
     embed = discord.Embed(
         title="🤝 Middleman Request Initiated",
         description="Please share the link to the job or service post you are hiring for or applying to.",
