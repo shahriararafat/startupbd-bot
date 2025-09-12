@@ -34,12 +34,13 @@ class JobPostModal(Modal, title='Post a New Job'):
         embed.add_field(name="📝 Description & Tasks", value=self.description_and_tasks.value, inline=False)
         embed.add_field(name="\n" + "─" * 40, value="", inline=False) # Divider
         
-        # --- NEW 2x2 GRID LAYOUT FOR BETTER ALIGNMENT ---
-        embed.add_field(name="💰 Budget", value=self.job_budget.value, inline=True)
-        embed.add_field(name="⏳ Deadline", value=self.deadline.value, inline=True)
-        embed.add_field(name="📍 Location", value=self.location.value, inline=True)
-        embed.add_field(name="👤 Client", value=interaction.user.mention, inline=True)
+        # --- UPDATED 2-COLUMN LAYOUT FOR PERFECT ALIGNMENT ---
+        # This combines related info into two neat columns, solving the alignment issue.
+        budget_and_client_value = f"{self.job_budget.value}\n**👤 Client**\n{interaction.user.mention}"
+        deadline_and_location_value = f"{self.deadline.value}\n**📍 Location**\n{self.location.value}"
 
+        embed.add_field(name="💰 Budget", value=budget_and_client_value, inline=True)
+        embed.add_field(name="⏳ Deadline", value=deadline_and_location_value, inline=True)
         
         # Adding the requested GIF
         embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c2eb8b&is=68c19a0b&hm=98825d9601eaf93a43de3536790f6ef23c8c9fb3ec14c426cf702fff5f84fdf2&=")
@@ -49,8 +50,8 @@ class JobPostModal(Modal, title='Post a New Job'):
 
         # --- CUSTOM NOTIFICATION MESSAGE ---
         # Note: Role names must be exact and are case-sensitive.
-        verified_seller_role = discord.utils.get(interaction.guild.roles, name="Verified Seller")
-        premium_seller_role = discord.utils.get(interaction.guild.roles, name="Verified Member")
+        verified_seller_role = discord.utils.get(interaction.guild.roles, name="verified seller")
+        premium_seller_role = discord.utils.get(interaction.guild.roles, name="premium seller")
 
         mentions = []
         if verified_seller_role:
