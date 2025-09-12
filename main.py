@@ -3,7 +3,7 @@ import discord
 import os
 import json
 from discord.ext import commands
-from dotenv import load_dotenv # Importing dotenv
+from dotenv import load_dotenv
 
 # --- Loading environment variables from .env file ---
 load_dotenv()
@@ -13,13 +13,16 @@ BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("DISCORD_TOKEN not found! Please set it in your .env file or environment variables.")
 
+# --- INTENTS CONFIGURATION (Message Content Intent Added) ---
 intents = discord.Intents.default()
 intents.messages = True
 intents.guilds = True
 intents.members = True
+intents.message_content = True # GURUTWOPURNO: Ei line-ti bot-ke message portey permission dey
 
-# Importing persistent views for the ticket system
+# --- Importing Persistent Views ---
 from cogs.ticket_system import TicketCreateView, TicketCloseView
+from cogs.job_service_system import JobServiceView, ApplyView
 
 class MyClient(commands.Bot):
     def __init__(self):
@@ -27,7 +30,6 @@ class MyClient(commands.Bot):
         self.permissions_filepath = "permissions.json"
         self.permissions = self.load_permissions()
 
-    # --- Permission Functions ---
     def load_permissions(self):
         if not os.path.exists(self.permissions_filepath):
             with open(self.permissions_filepath, 'w') as f:
@@ -41,17 +43,19 @@ class MyClient(commands.Bot):
             json.dump(self.permissions, f, indent=4)
 
     async def setup_hook(self) -> None:
+        # Registering all persistent views
         self.add_view(TicketCreateView())
         self.add_view(TicketCloseView())
+        self.add_view(JobServiceView())
+        self.add_view(ApplyView())
 
+        # Loading all cogs from the 'cogs' folder
         for filename in os.listdir('./cogs'):
             if filename.endswith('.py'):
                 await self.load_extension(f'cogs.{filename[:-3]}')
                 print(f"{filename} has been loaded.")
     
     async def on_ready(self):
-        # --- NEW BOT STATUS SET ---
-        # This status will be displayed as soon as the bot logs in
         game = discord.Game("Startup Bangladesh")
         await self.change_presence(status=discord.Status.online, activity=game)
         
