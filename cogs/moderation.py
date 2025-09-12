@@ -49,7 +49,7 @@ class Moderation(commands.Cog):
             print("Warning: Perspective API key not found or google-api-python-client is not installed. AI moderation is disabled.")
 
     # --- Helper function for logging punishments ---
-    async def log_punishment(self, source: typing.Union[discord.Interaction, discord.Message], action: str, user: discord.Member, moderator: discord.Member, reason: str, color: discord.Color = discord.Color.orange()):
+    async def log_punishment(self, source: typing.Union[discord.Interaction, discord.Message], action: str, user: typing.Union[discord.Member, discord.User], moderator: discord.Member, reason: str, color: discord.Color = discord.Color.orange()):
         guild = source.guild
         log_channel = discord.utils.get(guild.channels, name="punishment-log")
         if not log_channel:
@@ -125,9 +125,7 @@ class Moderation(commands.Cog):
                 try:
                     await message.delete()
                     await author.timeout(duration, reason=reason)
-                    # Log first
                     await self.log_punishment(message, f"Timeout (AI, {duration_str})", author, self.client.user, reason)
-                    # Then try to DM
                     try:
                         await author.send(f"Your message in **{message.guild.name}** was automatically removed and you have been timed out for **{duration_str}** for violating our community guidelines.")
                     except discord.Forbidden:
@@ -143,9 +141,7 @@ class Moderation(commands.Cog):
         if any(word in content_lower for word in BANNED_WORDS):
             try:
                 await message.delete()
-                # Log first
                 await self.log_punishment(message, "Warn (Auto)", author, self.client.user, "Used a banned word.")
-                # Then try to DM
                 try:
                     await author.send(f"Your message in **{message.guild.name}** was deleted for containing a banned word.")
                 except discord.Forbidden:
@@ -154,6 +150,49 @@ class Moderation(commands.Cog):
                 print(f"Banned word filter error: {e}")
 
     # --- Manual Moderation Commands ---
+    # ... (warn, timeout, kick, ban commands are the same)
+
+    @app_commands.command(name="unmute", description="Remove timeout from a user.")
+    @app_commands.describe(user="The user to unmute.", reason="The reason for removing the timeout.")
+    @app_commands.check(is_authorized)
+    async def unmute(self, interaction: discord.Interaction, user: discord.Member, reason: str):
+        if not user.is_timed_out():
+            return await interaction.response.send_message(f"{user.mention} is not currently timed out.", ephemeral=True)
+
+        try:
+            await user.timeout(None, reason=reason) # Pass None to remove timeout
+            await self.log_punishment(interaction, "Unmute", user, interaction.user, reason, color=discord.Color.green())
+            try:
+                await user.send(f"Your timeout in **{interaction.guild.name}** has been removed. Reason: {reason}")
+            except discord.Forbidden:
+                pass # Can't DM
+            await interaction.response.send_message(f"✅ {user.mention} has been unmuted.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Failed to unmute user: {e}", ephemeral=True)
+
+    @app_commands.command(name="unban", description="Unban a user from the server.")
+    @app_commands.describe(user_id="The ID of the user to unban.", reason="The reason for the unban.")
+    @app_commands.check(is_authorized)
+    async def unban(self, interaction: discord.Interaction, user_id: str, reason: str):
+        try:
+            # Convert user_id string to an integer
+            user_id_int = int(user_id)
+            user_to_unban = discord.Object(id=user_id_int)
+        except ValueError:
+            return await interaction.response.send_message("❌ Invalid User ID provided. Please enter a valid ID.", ephemeral=True)
+
+        try:
+            # Fetch the user object to get their name for the log
+            banned_user = await self.client.fetch_user(user_id_int)
+            await interaction.guild.unban(user_to_unban, reason=reason)
+            await self.log_punishment(interaction, "Unban", banned_user, interaction.user, reason, color=discord.Color.blue())
+            await interaction.response.send_message(f"✅ User `{banned_user.name}` (ID: {user_id}) has been unbanned.", ephemeral=True)
+        except discord.NotFound:
+            await interaction.response.send_message("❌ This user is not in the server's ban list.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Failed to unban user: {e}", ephemeral=True)
+    
+    # ... (The rest of the moderation commands)
     @app_commands.command(name="warn", description="Warn a user.")
     @app_commands.describe(user="The user to warn.", reason="The reason for the warning.")
     @app_commands.check(is_authorized)
@@ -183,7 +222,7 @@ class Moderation(commands.Cog):
             try:
                 await user.send(f"You have been timed out in **{interaction.guild.name}** for **{duration}**. Reason: {reason}")
             except discord.Forbidden:
-                pass # Can't DM
+                pass
             await interaction.response.send_message(f"✅ {user.mention} has been timed out for {duration}.", ephemeral=True)
         except Exception as e:
             return await interaction.response.send_message(f"❌ Failed to timeout user: {e}", ephemeral=True)
@@ -199,7 +238,7 @@ class Moderation(commands.Cog):
         try:
             await user.send(f"You have been kicked from **{interaction.guild.name}**. Reason: {reason}")
         except discord.Forbidden:
-            pass # User has DMs disabled
+            pass
         
         try:
             await user.kick(reason=reason)
@@ -218,14 +257,14 @@ class Moderation(commands.Cog):
         try:
             await user.send(f"You have been permanently banned from **{interaction.guild.name}**. Reason: {reason}")
         except discord.Forbidden:
-            pass # User has DMs disabled
+            pass
             
         try:
             await user.ban(reason=reason)
             await interaction.response.send_message(f"✅ {user.mention} has been permanently banned from the server.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
-
+            
 async def setup(client):
     await client.add_cog(Moderation(client))
 
