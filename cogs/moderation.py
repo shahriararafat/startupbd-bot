@@ -11,7 +11,6 @@ from utils import is_authorized
 from dotenv import load_dotenv
 
 # --- Perspective API Client ---
-# Try to import the Google API client library
 try:
     from googleapiclient import discovery, errors
 except ImportError:
@@ -30,16 +29,15 @@ BANNED_WORDS = [
 ]
 
 # AI Moderation Thresholds (from 0.0 to 1.0)
-HIGH_THRESHOLD = 0.8  # For severe issues like threats (24h timeout)
-MODERATE_THRESHOLD = 0.7 # For insults and high toxicity (1h timeout)
-LOW_THRESHOLD = 0.6    # For general toxicity (10m timeout)
+HIGH_THRESHOLD = 0.8
+MODERATE_THRESHOLD = 0.7
+LOW_THRESHOLD = 0.6
 
 class Moderation(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.cases_filepath = "punishment_cases.json"
         
-        # --- Initialize Perspective API ---
         self.api_key = os.getenv("PERSPECTIVE_API_KEY")
         if self.api_key and discovery:
             self.perspective_client = discovery.build(
@@ -52,8 +50,11 @@ class Moderation(commands.Cog):
 
     # --- Helper function for logging punishments ---
     async def log_punishment(self, source: typing.Union[discord.Interaction, discord.Message], action: str, user: discord.Member, moderator: discord.Member, reason: str, color: discord.Color = discord.Color.orange()):
-        log_channel = discord.utils.get(source.guild.channels, name="punishment-log")
-        if not log_channel: return
+        guild = source.guild
+        log_channel = discord.utils.get(guild.channels, name="punishment-log")
+        if not log_channel:
+            print(f"Error: `punishment-log` channel not found in {guild.name}.")
+            return
 
         if not os.path.exists(self.cases_filepath):
             with open(self.cases_filepath, 'w') as f: json.dump({"case_number": 0}, f)
@@ -71,7 +72,12 @@ class Moderation(commands.Cog):
         embed.add_field(name="Reason", value=reason, inline=False)
         embed.set_footer(text=f"ID: {user.id} • {datetime.datetime.now().strftime('%d/%m/%Y, %H:%M')}")
 
-        await log_channel.send(embed=embed)
+        try:
+            await log_channel.send(embed=embed)
+        except discord.Forbidden:
+            print(f"Error: Bot does not have permission to send messages in `#punishment-log`.")
+        except Exception as e:
+            print(f"Error sending to log channel: {e}")
 
     # --- AI Message Analysis Function ---
     async def analyze_message(self, text: str) -> dict:
@@ -101,6 +107,8 @@ class Moderation(commands.Cog):
         if message.author.bot or not message.guild or (isinstance(message.author, discord.Member) and message.author.guild_permissions.administrator):
             return
 
+        author = message.author
+        
         # --- 1. AI Moderation Check ---
         scores = await self.analyze_message(message.content)
         if scores:
@@ -116,37 +124,47 @@ class Moderation(commands.Cog):
             if duration:
                 try:
                     await message.delete()
-                    await message.author.timeout(duration, reason=reason)
-                    await message.author.send(f"Your message in **{message.guild.name}** was automatically removed and you have been timed out for **{duration_str}** for violating our community guidelines.")
-                    await self.log_punishment(message, f"Timeout (AI, {duration_str})", message.author, self.client.user, reason)
-                    return # Stop further checks
+                    await author.timeout(duration, reason=reason)
+                    # Log first
+                    await self.log_punishment(message, f"Timeout (AI, {duration_str})", author, self.client.user, reason)
+                    # Then try to DM
+                    try:
+                        await author.send(f"Your message in **{message.guild.name}** was automatically removed and you have been timed out for **{duration_str}** for violating our community guidelines.")
+                    except discord.Forbidden:
+                        print(f"Could not DM {author.name} (ID: {author.id}). They may have DMs disabled.")
+                    return
+                except discord.Forbidden:
+                    print(f"Failed to timeout {author.name}. Check bot's role hierarchy.")
                 except Exception as e:
                     print(f"AI auto-mod error: {e}")
-
-        # --- 2. Banned Word Filter (if not flagged by AI) ---
+                    
+        # --- 2. Banned Word Filter ---
         content_lower = message.content.lower()
         if any(word in content_lower for word in BANNED_WORDS):
             try:
                 await message.delete()
-                await message.author.send(f"Your message in **{message.guild.name}** was deleted for containing a banned word.")
-                await self.log_punishment(message, "Warn (Auto)", message.author, self.client.user, "Used a banned word.")
+                # Log first
+                await self.log_punishment(message, "Warn (Auto)", author, self.client.user, "Used a banned word.")
+                # Then try to DM
+                try:
+                    await author.send(f"Your message in **{message.guild.name}** was deleted for containing a banned word.")
+                except discord.Forbidden:
+                    print(f"Could not DM {author.name} (ID: {author.id}). They may have DMs disabled.")
             except Exception as e:
                 print(f"Banned word filter error: {e}")
-    
-    # --- Manual Moderation Commands (No changes needed) ---
-    # ... warn, timeout, kick, ban commands ...
+
+    # --- Manual Moderation Commands ---
     @app_commands.command(name="warn", description="Warn a user.")
     @app_commands.describe(user="The user to warn.", reason="The reason for the warning.")
     @app_commands.check(is_authorized)
     async def warn(self, interaction: discord.Interaction, user: discord.Member, reason: str):
+        await self.log_punishment(interaction, "Warn", user, interaction.user, reason)
         try:
             await user.send(f"You have been warned in **{interaction.guild.name}** for the following reason: {reason}")
             await interaction.response.send_message(f"✅ {user.mention} has been warned.", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message(f"⚠️ {user.mention} has been warned, but I could not DM them.", ephemeral=True)
         
-        await self.log_punishment(interaction, "Warn", user, interaction.user, reason)
-
     @app_commands.command(name="timeout", description="Timeout a user for a specific duration.")
     @app_commands.describe(user="The user to timeout.", duration="Duration (e.g., 10m, 1h, 1d).", reason="The reason for the timeout.")
     @app_commands.check(is_authorized)
@@ -157,18 +175,18 @@ class Moderation(commands.Cog):
         elif duration.lower().endswith('m'): seconds = int(duration[:-1]) * 60
         
         if seconds == 0:
-            return await interaction.response.send_message("Invalid duration format. Use 'm' for minutes, 'h' for hours, or 'd' for days.", ephemeral=True)
+            return await interaction.response.send_message("Invalid duration format. Use 'm', 'h', or 'd'.", ephemeral=True)
 
         try:
             await user.timeout(datetime.timedelta(seconds=seconds), reason=reason)
-            await user.send(f"You have been timed out in **{interaction.guild.name}** for **{duration}**. Reason: {reason}")
+            await self.log_punishment(interaction, f"Timeout ({duration})", user, interaction.user, reason)
+            try:
+                await user.send(f"You have been timed out in **{interaction.guild.name}** for **{duration}**. Reason: {reason}")
+            except discord.Forbidden:
+                pass # Can't DM
             await interaction.response.send_message(f"✅ {user.mention} has been timed out for {duration}.", ephemeral=True)
-        except discord.Forbidden:
-             await interaction.response.send_message(f"⚠️ {user.mention} has been timed out, but I could not DM them.", ephemeral=True)
         except Exception as e:
             return await interaction.response.send_message(f"❌ Failed to timeout user: {e}", ephemeral=True)
-
-        await self.log_punishment(interaction, f"Timeout ({duration})", user, interaction.user, reason)
     
     @app_commands.command(name="kick", description="Kick a user from the server.")
     @app_commands.describe(user="The user to kick.", reason="The reason for the kick.")
@@ -176,6 +194,8 @@ class Moderation(commands.Cog):
     async def kick(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         if user == interaction.user:
             return await interaction.response.send_message("You cannot kick yourself.", ephemeral=True)
+        
+        await self.log_punishment(interaction, "Kick", user, interaction.user, reason, color=discord.Color.red())
         try:
             await user.send(f"You have been kicked from **{interaction.guild.name}**. Reason: {reason}")
         except discord.Forbidden:
@@ -184,7 +204,6 @@ class Moderation(commands.Cog):
         try:
             await user.kick(reason=reason)
             await interaction.response.send_message(f"✅ {user.mention} has been kicked from the server.", ephemeral=True)
-            await self.log_punishment(interaction, "Kick", user, interaction.user, reason, color=discord.Color.red())
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to kick user: {e}", ephemeral=True)
 
@@ -194,6 +213,8 @@ class Moderation(commands.Cog):
     async def ban(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         if user == interaction.user:
             return await interaction.response.send_message("You cannot ban yourself.", ephemeral=True)
+
+        await self.log_punishment(interaction, "Ban", user, interaction.user, reason, color=discord.Color.dark_red())
         try:
             await user.send(f"You have been permanently banned from **{interaction.guild.name}**. Reason: {reason}")
         except discord.Forbidden:
@@ -202,7 +223,6 @@ class Moderation(commands.Cog):
         try:
             await user.ban(reason=reason)
             await interaction.response.send_message(f"✅ {user.mention} has been permanently banned from the server.", ephemeral=True)
-            await self.log_punishment(interaction, "Ban", user, interaction.user, reason, color=discord.Color.dark_red())
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to ban user: {e}", ephemeral=True)
 
