@@ -5,8 +5,7 @@ import asyncio
 
 # --- Owner details for the auto-responder ---
 OWNER_USERNAME = "shahriararafat"
-OWNER_ROLE_NAME = "Founder 👑" # UPDATED: Role name changed
-
+OWNER_ROLE_NAME = "Founder 👑" 
 class OwnerNotify(commands.Cog):
     def __init__(self, client):
         self.client = client
@@ -38,13 +37,14 @@ class OwnerNotify(commands.Cog):
             try:
                 await self.client.wait_for('message', check=check, timeout=60.0)
             except asyncio.TimeoutError:
-                # --- UPDATED: Website link is now clickable ---
+                # --- UPDATED: Website link embed is now suppressed ---
+                # By wrapping the link in <>, we tell Discord not to create a preview.
                 response_message = (
                     f"Hey {message.author.mention} 👋\n\n"
                     f"Our Founder 👑 {owner_member.mention} is currently away or busy right now.\n\n"
                     f"He’ll get back to you as soon as possible.\n"
                     f"Meanwhile, you can also check out his website 🌐\n\n"
-                    f"👉 [shahriararafat.ninja](https://shahriararafat.ninja)\n"
+                    f"👉 <https://shahriararafat.ninja>\n"
                     f"Thanks for your patience! ✨"
                 )
                 try:

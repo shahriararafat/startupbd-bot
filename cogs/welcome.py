@@ -17,20 +17,20 @@ class Welcome(commands.Cog):
 
         # Jodi channel-ti na thake, tahole bot kichu korbe na
         if welcome_channel is None:
-            print("Error: '👋welcome' name er kono channel paoa jayni.")
+            print("Error: '👋welcome' channel is not found.")
             return
 
         # --- NOTUN WELCOME MESSAGE FORMAT ---
 
         # Server er moddhe thaka channel guloke clickable korar jonno khuje neya hocche
         intro_channel = discord.utils.get(member.guild.channels, name="introduction")
-        general_channel = discord.utils.get(member.guild.channels, name="general-chats")
-        service_channel = discord.utils.get(member.guild.channels, name="publish-your-service")
+        general_channel = discord.utils.get(member.guild.channels, name="general")
+        service_channel = discord.utils.get(member.guild.channels, name="post-service-or-jobs")
 
         # Jodi channel paoa jay, tahole mention kora hobe, noile sadharon text dekhabe
         intro_mention = intro_channel.mention if intro_channel else "#introduction"
-        general_mention = general_channel.mention if general_channel else "#general-chats"
-        service_mention = service_channel.mention if service_channel else "#publish-your-service"
+        general_mention = general_channel.mention if general_channel else "#general"
+        service_mention = service_channel.mention if service_channel else "#post-service-or-jobs"
         
         # Apnar deya text onujayi embed description toiri kora hocche
         description_text = (
