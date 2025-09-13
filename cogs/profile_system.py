@@ -6,26 +6,36 @@ from discord.ui import View, Button, Modal, TextInput
 import typing
 import json
 import os
+import re
 from utils import is_authorized
 
 # --- Profile Modal (The form users will fill) ---
 class ProfileSetModal(Modal, title="Set Your Professional Profile"):
     display_name = TextInput(
-        label="Display Name",
+        label="👤 Name",
         placeholder="The name you want to show on your profile.",
         required=True,
-        style=discord.TextStyle.short
     )
     skills = TextInput(
-        label="Your Skills",
-        placeholder="List your skills, separated by commas (e.g., Python, Graphic Design, Marketing).",
+        label="💼 Skills",
+        placeholder="List your key skills (e.g., Python, Graphic Design).",
         required=True,
         style=discord.TextStyle.paragraph
     )
-    services = TextInput(
-        label="Services You Offer",
-        placeholder="Describe the services you provide to the community.",
-        required=True,
+    portfolio = TextInput(
+        label="📂 Portfolio",
+        placeholder="Link to your portfolio (e.g., GitHub, Behance).",
+        required=False,
+    )
+    experience = TextInput(
+        label="📊 Experience",
+        placeholder="Briefly describe your experience (e.g., 3+ Years in Web Dev).",
+        required=False,
+    )
+    certification = TextInput(
+        label="📜 Certifications",
+        placeholder="List any relevant certifications (optional).",
+        required=False,
         style=discord.TextStyle.paragraph
     )
 
@@ -34,99 +44,106 @@ class ProfileSetModal(Modal, title="Set Your Professional Profile"):
         if not log_channel:
             return await interaction.response.send_message("❌ Error: `#profile-log` channel not found. Please ask an admin to create it.", ephemeral=True)
 
-        # Create an embed for admin approval
         approval_embed = discord.Embed(
             title="New Profile Submission for Approval",
             color=discord.Color.yellow()
         )
         approval_embed.set_author(name=f"{interaction.user.name} ({interaction.user.id})", icon_url=interaction.user.display_avatar.url)
-        approval_embed.add_field(name="Display Name", value=self.display_name.value, inline=False)
-        approval_embed.add_field(name="Skills", value=self.skills.value, inline=False)
-        approval_embed.add_field(name="Services", value=self.services.value, inline=False)
+        approval_embed.add_field(name="👤 Name", value=self.display_name.value, inline=False)
+        approval_embed.add_field(name="💼 Skills", value=self.skills.value, inline=False)
+        approval_embed.add_field(name="📂 Portfolio", value=self.portfolio.value or "Not Provided", inline=False)
+        approval_embed.add_field(name="📊 Experience", value=self.experience.value or "Not Provided", inline=False)
+        approval_embed.add_field(name="📜 Certifications", value=self.certification.value or "Not Provided", inline=False)
         
-        # We need to pass the user's ID to the view
-        view = ApprovalView(user_id=interaction.user.id)
+        view = ApprovalView()
         await log_channel.send(embed=approval_embed, view=view)
         
         await interaction.response.send_message("✅ Your profile has been submitted for approval by the admins!", ephemeral=True)
 
 # --- Approval View (Buttons for Admins) ---
 class ApprovalView(View):
-    def __init__(self, user_id: int):
+    def __init__(self):
         super().__init__(timeout=None)
-        # Store the user ID in the view itself
-        self.user_id = user_id
 
-    def _save_profile(self, profile_data: dict):
+    def _save_profile(self, user_id: int, profile_data: dict):
         filepath = "profiles.json"
-        if not os.path.exists(filepath):
-            profiles = {}
+        if not os.path.exists(filepath): profiles = {}
         else:
             with open(filepath, 'r') as f:
-                profiles = json.load(f)
+                try: profiles = json.load(f)
+                except json.JSONDecodeError: profiles = {}
         
-        profiles[str(self.user_id)] = profile_data
+        profiles[str(user_id)] = profile_data
         
         with open(filepath, 'w') as f:
             json.dump(profiles, f, indent=4)
 
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green, custom_id="approve_profile")
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green, custom_id="approve_profile_final")
     async def approve(self, interaction: discord.Interaction, button: Button):
         if not is_authorized(interaction):
             return await interaction.response.send_message("You do not have permission to approve profiles.", ephemeral=True)
 
         original_embed = interaction.message.embeds[0]
+        author_name = original_embed.author.name
+        
+        user_id_match = re.search(r'\((\d+)\)', author_name)
+        if not user_id_match:
+            return await interaction.response.send_message("Could not find the user ID in the original message.", ephemeral=True)
+        user_id_from_author = int(user_id_match.group(1))
+
         profile_data = {
             "name": original_embed.fields[0].value,
             "skills": original_embed.fields[1].value,
-            "services": original_embed.fields[2].value
+            "portfolio": original_embed.fields[2].value,
+            "experience": original_embed.fields[3].value,
+            "certification": original_embed.fields[4].value
         }
         
-        self._save_profile(profile_data)
+        self._save_profile(user_id_from_author, profile_data)
 
-        # Update the original message to show it's been handled
         approved_embed = original_embed
         approved_embed.title = "Profile Approved"
         approved_embed.color = discord.Color.green()
         approved_embed.add_field(name="Handled By", value=interaction.user.mention, inline=False)
         
-        for item in self.children:
-            item.disabled = True # Disable buttons
-        await interaction.message.edit(embed=approved_embed, view=self)
+        disabled_view = View()
+        disabled_view.add_item(Button(label="Approved", style=discord.ButtonStyle.success, disabled=True))
         
+        await interaction.message.edit(embed=approved_embed, view=disabled_view)
         await interaction.response.send_message("Profile approved.", ephemeral=True)
-        # Optionally, DM the user
-        user = await self.client.fetch_user(self.user_id)
+
+        user = await interaction.client.fetch_user(user_id_from_author)
         if user:
-            try:
-                await user.send(f"Congratulations! Your profile on **{interaction.guild.name}** has been approved.")
-            except discord.Forbidden:
-                pass
+            try: await user.send(f"Congratulations! Your profile on **{interaction.guild.name}** has been approved.")
+            except discord.Forbidden: pass
 
-
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.red, custom_id="deny_profile")
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.red, custom_id="deny_profile_final")
     async def deny(self, interaction: discord.Interaction, button: Button):
         if not is_authorized(interaction):
             return await interaction.response.send_message("You do not have permission to deny profiles.", ephemeral=True)
 
         original_embed = interaction.message.embeds[0]
+        author_name = original_embed.author.name
+        user_id_match = re.search(r'\((\d+)\)', author_name)
+        if not user_id_match:
+            return await interaction.response.send_message("Could not find the user ID in the original message.", ephemeral=True)
+        user_id_from_author = int(user_id_match.group(1))
+
         denied_embed = original_embed
         denied_embed.title = "Profile Denied"
         denied_embed.color = discord.Color.red()
         denied_embed.add_field(name="Handled By", value=interaction.user.mention, inline=False)
+        
+        disabled_view = View()
+        disabled_view.add_item(Button(label="Denied", style=discord.ButtonStyle.danger, disabled=True))
 
-        for item in self.children:
-            item.disabled = True
-        await interaction.message.edit(embed=denied_embed, view=self)
-
+        await interaction.message.edit(embed=denied_embed, view=disabled_view)
         await interaction.response.send_message("Profile denied.", ephemeral=True)
-        # Optionally, DM the user
-        user = await self.client.fetch_user(self.user_id)
+
+        user = await interaction.client.fetch_user(user_id_from_author)
         if user:
-            try:
-                await user.send(f"Sorry, your profile submission on **{interaction.guild.name}** was not approved.")
-            except discord.Forbidden:
-                pass
+            try: await user.send(f"Sorry, your profile submission on **{interaction.guild.name}** was not approved.")
+            except discord.Forbidden: pass
 
 # --- Cog Class ---
 class ProfileSystem(commands.Cog):
@@ -138,7 +155,10 @@ class ProfileSystem(commands.Cog):
         if not os.path.exists(self.profiles_filepath):
             return {}
         with open(self.profiles_filepath, 'r') as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
 
     @app_commands.command(name="setprofile", description="Set or update your professional profile.")
     async def setprofile(self, interaction: discord.Interaction):
@@ -157,12 +177,20 @@ class ProfileSystem(commands.Cog):
             return await interaction.response.send_message(msg, ephemeral=True)
             
         profile_embed = discord.Embed(
-            title=f"{user_profile['name']}'s Profile",
-            color=target_user.color
+            color=target_user.color or discord.Color.blue()
         )
+        profile_embed.set_author(name=f"{target_user.display_name}'s Profile", icon_url=target_user.display_avatar.url)
         profile_embed.set_thumbnail(url=target_user.display_avatar.url)
-        profile_embed.add_field(name="Skills", value=user_profile['skills'], inline=False)
-        profile_embed.add_field(name="Services", value=user_profile['services'], inline=False)
+        
+        description = (
+            f"**👤 Name:** {user_profile['name']}\n"
+            f"**💼 Skills:** {user_profile['skills']}\n"
+            f"**📂 Portfolio:** {user_profile.get('portfolio', 'Not Provided')}\n"
+            f"**📊 Experience:** {user_profile.get('experience', 'Not Provided')}\n"
+            f"**📜 Certification:** {user_profile.get('certification', 'Not Provided')}"
+        )
+        
+        profile_embed.description = description
         profile_embed.set_footer(text=f"User ID: {target_user.id}")
 
         await interaction.response.send_message(embed=profile_embed)
@@ -170,3 +198,4 @@ class ProfileSystem(commands.Cog):
 
 async def setup(client):
     await client.add_cog(ProfileSystem(client))
+

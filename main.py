@@ -49,7 +49,7 @@ class MyClient(commands.Bot):
         self.add_view(TicketCloseView())
         self.add_view(JobServiceView())
         self.add_view(ApplyView())
-        self.add_view(ApprovalView(user_id=0)) # Notun view register kora hocche
+        self.add_view(ApprovalView()) # UPDATED: View is now registered correctly without parameters.
 
         # Loading all cogs from the 'cogs' folder
         for filename in os.listdir('./cogs'):
