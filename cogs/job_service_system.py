@@ -230,19 +230,23 @@ class JobPostModal(Modal, title='Post a New Job'):
         job_channel = discord.utils.get(interaction.guild.channels, name="jobs-market")
         if not job_channel: return await interaction.response.send_message("❌ Error: `#jobs-market` channel not found.", ephemeral=True)
 
-        embed = discord.Embed(color=discord.Color.from_rgb(88, 101, 242))
-        embed.set_author(name=f"Hiring: {self.job_title.value}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
+        # --- NEW PROFESSIONAL EMBED DESIGN ---
+        embed = discord.Embed(color=discord.Color.from_rgb(58, 138, 240)) # Blue accent color
+        embed.set_author(name=f"Hiring: {self.job_title.value}")
         
         description_value = (
-            f"Posted by {interaction.user.mention}\n\n"
-            f"**📝 Description & Tasks**\n{self.description_and_tasks.value}"
+            f"**Description**\n"
+            f"> {self.description_and_tasks.value.replace('\n', '\n> ')}\n\n"
         )
         embed.description = description_value
         
-        budget_client_value = f"{self.job_budget.value}\n**👤 Client**\n{interaction.user.mention}"
-        deadline_loc_value = f"{self.deadline.value}\n**📍 Location**\n{self.location.value}"
-        embed.add_field(name="💰 Budget", value=budget_client_value, inline=True)
-        embed.add_field(name="⏳ Deadline", value=deadline_loc_value, inline=True)
+        embed.add_field(name="💰 Budget", value=self.job_budget.value, inline=True)
+        embed.add_field(name="⏳ Deadline", value=self.deadline.value, inline=True)
+        embed.add_field(name="📍 Location", value=self.location.value, inline=True)
+        embed.add_field(name="👤 Client", value=interaction.user.mention, inline=True)
+        
+        # --- GIF ADDED ---
+        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = BiddingView()
@@ -252,14 +256,13 @@ class JobPostModal(Modal, title='Post a New Job'):
         mentions = [r.mention for r in [verified_seller_role, premium_seller_role] if r]
         notification_content = f"New job posted! {' & '.join(mentions) if mentions else ''}"
 
-        if isinstance(job_channel, discord.ForumChannel):
-            await job_channel.create_thread(name=self.job_title.value, content=notification_content, embed=embed, view=view)
-        else:
-            await job_channel.send(content=notification_content, embed=embed, view=view)
+        message_to_send = await job_channel.send(content=notification_content, embed=embed, view=view)
+        save_bids(message_to_send.id, []) # Initialize bids for the new job post
         
         await interaction.response.send_message("✅ Your job has been posted in #jobs-market!", ephemeral=True)
 
 class ServicePostModal(Modal, title='Post Your Service'):
+    # ... (Same code as before, no changes needed for this modal)
     service_title = TextInput(label='Service Title', placeholder='Example: Professional Logo Design', required=True)
     service_description = TextInput(label='Service Description', placeholder='Describe the service you are offering.', style=discord.TextStyle.paragraph, required=True)
     budget = TextInput(label='Budget / Pricing', placeholder='Example: Starts from $20', required=True)
@@ -278,6 +281,9 @@ class ServicePostModal(Modal, title='Post Your Service'):
         embed.add_field(name="\n" + "─" * 40, value="", inline=False)
         embed.add_field(name="💵 Pricing", value=self.budget.value, inline=True)
         embed.add_field(name="🚚 Delivery Time", value=self.delivery_time.value, inline=True)
+        
+        # --- GIF ADDED ---
+        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = ApplyView()
