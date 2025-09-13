@@ -22,7 +22,7 @@ intents.message_content = True
 
 # Importing All Persistent Views
 from cogs.ticket_system import TicketCreateView, TicketCloseView
-from cogs.job_service_system import JobServiceView, ApplyView
+from cogs.job_service_system import JobServiceView, ApplyView, BiddingView # BiddingView import
 from cogs.profile_system import ApprovalView
 from utils import is_authorized # Permission checker import
 
@@ -48,35 +48,28 @@ class MyClient(commands.Bot):
 
     # --- CORRECTED GLOBAL COMMAND CHECK ---
     async def on_interaction(self, interaction: discord.Interaction):
-        # Let non-command interactions (buttons, modals) pass through
         if interaction.type != discord.InteractionType.application_command:
             return await super().on_interaction(interaction)
 
-        # Admins can use commands anywhere, so we process and exit early
         if is_authorized(interaction):
             return await super().on_interaction(interaction)
 
-        # --- For regular members, enforce channel restrictions ---
         command_name = interaction.data.get("name")
         
-        # Rule 1: Check for /profile and /setprofile commands
-        if command_name in ["profile", "setprofile"]:
+        if command_name in ["profile", "setprofile", "deleteprofile"]:
             profile_channel = discord.utils.get(interaction.guild.channels, name=self.profile_channel_name)
             if profile_channel and interaction.channel.id == profile_channel.id:
-                return await super().on_interaction(interaction) # Correct channel, process command
+                return await super().on_interaction(interaction)
             else:
-                # Wrong channel or channel doesn't exist, send error and block
                 error_msg = f"The `/{command_name}` command can only be used in {profile_channel.mention}." if profile_channel else f"The `{self.profile_channel_name}` channel has not been set up. Please contact an admin."
                 await interaction.response.send_message(error_msg, ephemeral=True)
                 return
         
-        # Rule 2: Check for all other commands
         else:
             command_channel = discord.utils.get(interaction.guild.channels, name=self.command_channel_name)
             if command_channel and interaction.channel.id == command_channel.id:
-                return await super().on_interaction(interaction) # Correct channel, process command
+                return await super().on_interaction(interaction)
             else:
-                # Wrong channel or channel doesn't exist, send error and block
                 error_msg = f"Bot commands (except profile commands) can only be used in {command_channel.mention}." if command_channel else f"The `{self.command_channel_name}` channel has not been set up. Please contact an admin."
                 await interaction.response.send_message(error_msg, ephemeral=True)
                 return
@@ -88,6 +81,7 @@ class MyClient(commands.Bot):
         self.add_view(JobServiceView())
         self.add_view(ApplyView())
         self.add_view(ApprovalView())
+        self.add_view(BiddingView()) # BiddingView register kora hoyeche
 
         # Loading all cogs from the 'cogs' folder
         for filename in os.listdir('./cogs'):
