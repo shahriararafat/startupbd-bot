@@ -46,41 +46,40 @@ class MyClient(commands.Bot):
         with open(self.permissions_filepath, 'w') as f:
             json.dump(self.permissions, f, indent=4)
 
-    # --- UPDATED GLOBAL COMMAND CHECK ---
+    # --- CORRECTED GLOBAL COMMAND CHECK ---
     async def on_interaction(self, interaction: discord.Interaction):
-        # We only want to apply channel restrictions to slash commands
-        if interaction.type == discord.InteractionType.application_command:
-            
-            # Admins can use commands in any channel
-            if is_authorized(interaction):
-                return await super().on_interaction(interaction)
+        # Let non-command interactions (buttons, modals) pass through
+        if interaction.type != discord.InteractionType.application_command:
+            return await super().on_interaction(interaction)
 
-            # For regular members, check the channel based on the command used
-            command_name = interaction.data.get("name")
+        # Admins can use commands anywhere, so we process and exit early
+        if is_authorized(interaction):
+            return await super().on_interaction(interaction)
 
-            # Specific check for /profile and /setprofile commands
-            if command_name in ["profile", "setprofile"]:
-                profile_channel = discord.utils.get(interaction.guild.channels, name=self.profile_channel_name)
-                if not profile_channel:
-                    await interaction.response.send_message(f"The `{self.profile_channel_name}` channel has not been set up. Please contact an admin.", ephemeral=True)
-                    return # Block command
-                if interaction.channel.id != profile_channel.id:
-                    await interaction.response.send_message(f"The `/{command_name}` command can only be used in {profile_channel.mention}.", ephemeral=True)
-                    return # Block command
-            
-            # General check for all other commands
+        # --- For regular members, enforce channel restrictions ---
+        command_name = interaction.data.get("name")
+        
+        # Rule 1: Check for /profile and /setprofile commands
+        if command_name in ["profile", "setprofile"]:
+            profile_channel = discord.utils.get(interaction.guild.channels, name=self.profile_channel_name)
+            if profile_channel and interaction.channel.id == profile_channel.id:
+                return await super().on_interaction(interaction) # Correct channel, process command
             else:
-                command_channel = discord.utils.get(interaction.guild.channels, name=self.command_channel_name)
-                if not command_channel:
-                    await interaction.response.send_message(f"The `{self.command_channel_name}` channel has not been set up. Please contact an admin.", ephemeral=True)
-                    return # Block command
-                if interaction.channel.id != command_channel.id:
-                    await interaction.response.send_message(f"Bot commands can only be used in {command_channel.mention}.", ephemeral=True)
-                    return # Block command
-
-        # If the interaction is not a restricted command, or the channel is correct, process it
-        # This also handles buttons, modals, etc.
-        await super().on_interaction(interaction)
+                # Wrong channel or channel doesn't exist, send error and block
+                error_msg = f"The `/{command_name}` command can only be used in {profile_channel.mention}." if profile_channel else f"The `{self.profile_channel_name}` channel has not been set up. Please contact an admin."
+                await interaction.response.send_message(error_msg, ephemeral=True)
+                return
+        
+        # Rule 2: Check for all other commands
+        else:
+            command_channel = discord.utils.get(interaction.guild.channels, name=self.command_channel_name)
+            if command_channel and interaction.channel.id == command_channel.id:
+                return await super().on_interaction(interaction) # Correct channel, process command
+            else:
+                # Wrong channel or channel doesn't exist, send error and block
+                error_msg = f"Bot commands (except profile commands) can only be used in {command_channel.mention}." if command_channel else f"The `{self.command_channel_name}` channel has not been set up. Please contact an admin."
+                await interaction.response.send_message(error_msg, ephemeral=True)
+                return
 
     async def setup_hook(self) -> None:
         # Registering all persistent views

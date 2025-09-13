@@ -152,13 +152,14 @@ class ProfileSystem(commands.Cog):
         self.profiles_filepath = "profiles.json"
 
     def _load_profiles(self):
-        if not os.path.exists(self.profiles_filepath):
-            return {}
+        if not os.path.exists(self.profiles_filepath): return {}
         with open(self.profiles_filepath, 'r') as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
+            try: return json.load(f)
+            except json.JSONDecodeError: return {}
+            
+    def _save_profiles(self, profiles_data: dict):
+        with open(self.profiles_filepath, 'w') as f:
+            json.dump(profiles_data, f, indent=4)
 
     @app_commands.command(name="setprofile", description="Set or update your professional profile.")
     async def setprofile(self, interaction: discord.Interaction):
@@ -176,9 +177,7 @@ class ProfileSystem(commands.Cog):
             msg = "You do not have an approved profile yet. Use `/setprofile` to create one." if target_user == interaction.user else f"{target_user.display_name} does not have an approved profile yet."
             return await interaction.response.send_message(msg, ephemeral=True)
             
-        profile_embed = discord.Embed(
-            color=target_user.color or discord.Color.blue()
-        )
+        profile_embed = discord.Embed(color=target_user.color or discord.Color.blue())
         profile_embed.set_author(name=f"{target_user.display_name}'s Profile", icon_url=target_user.display_avatar.url)
         profile_embed.set_thumbnail(url=target_user.display_avatar.url)
         
@@ -194,6 +193,40 @@ class ProfileSystem(commands.Cog):
         profile_embed.set_footer(text=f"User ID: {target_user.id}")
 
         await interaction.response.send_message(embed=profile_embed)
+
+    # --- NEW DELETE PROFILE COMMAND ---
+    @app_commands.command(name="deleteprofile", description="Delete your own profile, or another user's (Admins only).")
+    @app_commands.describe(user="The user whose profile to delete (optional, requires admin permission).")
+    async def deleteprofile(self, interaction: discord.Interaction, user: typing.Optional[discord.Member] = None):
+        target_user = user or interaction.user
+
+        # --- Permission Check ---
+        # If a user is specified, the command invoker must be an admin.
+        # If no user is specified, it means the user is deleting their own profile.
+        if user and not is_authorized(interaction):
+            return await interaction.response.send_message("❌ You need admin permission to delete another user's profile.", ephemeral=True)
+        
+        profiles = self._load_profiles()
+        
+        if str(target_user.id) not in profiles:
+            msg = "You do not have a profile to delete." if target_user == interaction.user else f"{target_user.display_name} does not have a profile."
+            return await interaction.response.send_message(msg, ephemeral=True)
+            
+        # Delete the profile from the dictionary
+        del profiles[str(target_user.id)]
+        
+        # Save the updated dictionary to the JSON file
+        self._save_profiles(profiles)
+        
+        # Send confirmation
+        if user: # Admin deleted someone's profile
+            await interaction.response.send_message(f"✅ The profile for {target_user.mention} has been successfully deleted.", ephemeral=True)
+            try:
+                await target_user.send(f"An admin has deleted your profile on **{interaction.guild.name}**.")
+            except discord.Forbidden:
+                pass # Can't DM the user
+        else: # User deleted their own profile
+            await interaction.response.send_message("✅ Your profile has been successfully deleted.", ephemeral=True)
 
 
 async def setup(client):
