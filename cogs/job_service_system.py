@@ -44,7 +44,6 @@ async def update_job_embed_with_bids(interaction: discord.Interaction, message: 
     original_embed = message.embeds[0]
     bids = get_bids(message.id)
     
-    # Rebuild the embed to reflect the new bid state
     new_embed = discord.Embed(
         description=original_embed.description,
         color=original_embed.color
@@ -52,12 +51,10 @@ async def update_job_embed_with_bids(interaction: discord.Interaction, message: 
     if original_embed.author:
         new_embed.set_author(name=original_embed.author.name, icon_url=original_embed.author.icon_url)
     
-    # Copy existing non-bid fields
     for field in original_embed.fields:
         if not field.name.startswith("Bids"):
             new_embed.add_field(name=field.name, value=field.value, inline=field.inline)
 
-    # Add the updated bids field
     if bids:
         bid_list_value = ""
         for bid in bids:
@@ -170,7 +167,7 @@ class BiddingView(View):
             disabled_view = View()
             disabled_view.add_item(Button(label="Deal Finalized", style=discord.ButtonStyle.secondary, disabled=True))
             final_embed = interaction.message.embeds[0]
-            if len(final_embed.fields) < 25: # Discord's limit for fields
+            if len(final_embed.fields) < 25:
                 final_embed.add_field(name="🏆 Winner", value=f"A deal has been finalized with {seller.mention}!", inline=False)
             await interaction.message.edit(embed=final_embed, view=disabled_view)
             await select_interaction.response.send_message(f"✅ Deal ticket opened: {deal_channel.mention}", ephemeral=True)
@@ -221,7 +218,7 @@ class JobServiceSystem(commands.Cog):
 
 class JobPostModal(Modal, title='Post a New Job'):
     job_title = TextInput(label='Job Title', placeholder='Example: Need a Graphics Designer', required=True)
-    description_and_tasks = TextInput(label='Job Description & Tasks', placeholder='Provide a detailed job description and list the specific tasks.', style=discord.TextStyle.paragraph, required=True)
+    description_and_tasks = TextInput(label='Job Description & Tasks', placeholder='Provide a detailed job description...', style=discord.TextStyle.paragraph, required=True)
     job_budget = TextInput(label='Job Budget', placeholder='Example: $50 or 5000 BDT', required=True)
     deadline = TextInput(label='Deadline', placeholder='Example: 7 days or 25-09-2025', required=True)
     location = TextInput(label='Preferred Location', placeholder='Example: Remote', required=False, default="Not Specified")
@@ -230,13 +227,14 @@ class JobPostModal(Modal, title='Post a New Job'):
         job_channel = discord.utils.get(interaction.guild.channels, name="jobs-market")
         if not job_channel: return await interaction.response.send_message("❌ Error: `#jobs-market` channel not found.", ephemeral=True)
 
-        # --- NEW PROFESSIONAL EMBED DESIGN ---
-        embed = discord.Embed(color=discord.Color.from_rgb(58, 138, 240)) # Blue accent color
+        embed = discord.Embed(color=discord.Color.from_rgb(58, 138, 240))
         embed.set_author(name=f"Hiring: {self.job_title.value}")
         
+        # --- SYNTAX ERROR FIX ---
+        processed_desc = self.description_and_tasks.value.replace('\n', '\n> ')
         description_value = (
             f"**Description**\n"
-            f"> {self.description_and_tasks.value.replace('\n', '\n> ')}\n\n"
+            f"> {processed_desc}\n\n"
         )
         embed.description = description_value
         
@@ -245,8 +243,7 @@ class JobPostModal(Modal, title='Post a New Job'):
         embed.add_field(name="📍 Location", value=self.location.value, inline=True)
         embed.add_field(name="👤 Client", value=interaction.user.mention, inline=True)
         
-        # --- GIF ADDED ---
-        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
+        embed.set_image(url="https://i.imgur.com/U3ytS2b.png")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = BiddingView()
@@ -256,13 +253,12 @@ class JobPostModal(Modal, title='Post a New Job'):
         mentions = [r.mention for r in [verified_seller_role, premium_seller_role] if r]
         notification_content = f"New job posted! {' & '.join(mentions) if mentions else ''}"
 
-        message_to_send = await job_channel.send(content=notification_content, embed=embed, view=view)
-        save_bids(message_to_send.id, []) # Initialize bids for the new job post
+        message = await job_channel.send(content=notification_content, embed=embed, view=view)
+        save_bids(message.id, []) # Initialize bids for the new job
         
         await interaction.response.send_message("✅ Your job has been posted in #jobs-market!", ephemeral=True)
 
 class ServicePostModal(Modal, title='Post Your Service'):
-    # ... (Same code as before, no changes needed for this modal)
     service_title = TextInput(label='Service Title', placeholder='Example: Professional Logo Design', required=True)
     service_description = TextInput(label='Service Description', placeholder='Describe the service you are offering.', style=discord.TextStyle.paragraph, required=True)
     budget = TextInput(label='Budget / Pricing', placeholder='Example: Starts from $20', required=True)
@@ -276,14 +272,21 @@ class ServicePostModal(Modal, title='Post Your Service'):
 
         embed = discord.Embed(description=f"Offered by {interaction.user.mention}", color=discord.Color.from_rgb(3, 166, 84))
         embed.set_author(name=f"Service: {self.service_title.value}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
-        embed.add_field(name="📄 Service Description", value=self.service_description.value, inline=False)
-        embed.add_field(name="💡 My Experience", value=self.experience.value, inline=False)
+        
+        # --- SYNTAX ERROR FIX ---
+        processed_desc = self.service_description.value.replace('\n', '\n> ')
+        processed_exp = self.experience.value.replace('\n', '\n> ')
+        description_string = (
+            f"**Service Description**\n"
+            f"> {processed_desc}\n\n"
+            f"**My Experience**\n"
+            f"> {processed_exp}"
+        )
+        embed.description = description_string
+
         embed.add_field(name="\n" + "─" * 40, value="", inline=False)
         embed.add_field(name="💵 Pricing", value=self.budget.value, inline=True)
         embed.add_field(name="🚚 Delivery Time", value=self.delivery_time.value, inline=True)
-        
-        # --- GIF ADDED ---
-        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = ApplyView()
