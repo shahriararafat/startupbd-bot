@@ -268,9 +268,9 @@ class ServicePostModal(Modal, title='Post Your Service'):
     experience = TextInput(label='Your Experience', placeholder='Example: 5+ years in graphic design', style=discord.TextStyle.paragraph, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
-        service_channel = discord.utils.get(interaction.guild.channels, name="post-service")
+        service_channel = discord.utils.get(interaction.guild.channels, name="find-service")
         if not service_channel:
-            return await interaction.response.send_message("❌ Error: `#post-service` channel not found.", ephemeral=True)
+            return await interaction.response.send_message("❌ Error: `#find-service` channel not found.", ephemeral=True)
 
         embed = discord.Embed(description=f"Offered by {interaction.user.mention}", color=discord.Color.from_rgb(3, 166, 84))
         embed.set_author(name=f"Service: {self.service_title.value}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
