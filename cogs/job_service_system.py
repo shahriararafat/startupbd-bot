@@ -167,7 +167,7 @@ class BiddingView(View):
             disabled_view = View()
             disabled_view.add_item(Button(label="Deal Finalized", style=discord.ButtonStyle.secondary, disabled=True))
             final_embed = interaction.message.embeds[0]
-            if len(final_embed.fields) < 25:
+            if len(final_embed.fields) < 25: # Discord's limit for fields
                 final_embed.add_field(name="🏆 Winner", value=f"A deal has been finalized with {seller.mention}!", inline=False)
             await interaction.message.edit(embed=final_embed, view=disabled_view)
             await select_interaction.response.send_message(f"✅ Deal ticket opened: {deal_channel.mention}", ephemeral=True)
@@ -243,7 +243,7 @@ class JobPostModal(Modal, title='Post a New Job'):
         embed.add_field(name="📍 Location", value=self.location.value, inline=True)
         embed.add_field(name="👤 Client", value=interaction.user.mention, inline=True)
         
-        embed.set_image(url="https://i.imgur.com/U3ytS2b.png")
+        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = BiddingView()
@@ -253,8 +253,8 @@ class JobPostModal(Modal, title='Post a New Job'):
         mentions = [r.mention for r in [verified_seller_role, premium_seller_role] if r]
         notification_content = f"New job posted! {' & '.join(mentions) if mentions else ''}"
 
-        message = await job_channel.send(content=notification_content, embed=embed, view=view)
-        save_bids(message.id, []) # Initialize bids for the new job
+        message_to_send = await job_channel.send(content=notification_content, embed=embed, view=view)
+        save_bids(message_to_send.id, []) # Initialize bids for the new job post
         
         await interaction.response.send_message("✅ Your job has been posted in #jobs-market!", ephemeral=True)
 
@@ -287,6 +287,8 @@ class ServicePostModal(Modal, title='Post Your Service'):
         embed.add_field(name="\n" + "─" * 40, value="", inline=False)
         embed.add_field(name="💵 Pricing", value=self.budget.value, inline=True)
         embed.add_field(name="🚚 Delivery Time", value=self.delivery_time.value, inline=True)
+        
+        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = ApplyView()
