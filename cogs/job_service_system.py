@@ -6,8 +6,41 @@ from discord.ui import View, Button, Modal, TextInput
 import typing
 from utils import is_authorized
 
-# --- Modals for Job and Service Posts ---
+# --- New View for Job Posts with Thread System ---
+class JobPostView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
+    @discord.ui.button(label="Apply / View Applications", style=discord.ButtonStyle.success, custom_id="apply_thread_button", emoji="✍️")
+    async def apply_thread(self, interaction: discord.Interaction, button: Button):
+        job_post_message = interaction.message
+        
+        # Find the existing thread or create a new one
+        thread_name = f"Apps for: {job_post_message.embeds[0].author.name}"
+        thread = discord.utils.get(interaction.channel.threads, name=thread_name)
+
+        if thread is None:
+            try:
+                thread = await job_post_message.create_thread(name=thread_name)
+                # Add the job poster to the new thread automatically
+                footer_text = job_post_message.embeds[0].footer.text
+                if footer_text and "User ID:" in footer_text:
+                    buyer_id = int(footer_text.split("User ID: ")[1])
+                    buyer = interaction.guild.get_member(buyer_id)
+                    if buyer:
+                        await thread.add_user(buyer)
+
+            except Exception as e:
+                return await interaction.response.send_message(f"Could not create application thread: {e}", ephemeral=True)
+
+        try:
+            await thread.add_user(interaction.user)
+            await interaction.response.send_message(f"You have been added to the private application thread: {thread.mention}", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Could not add you to the thread. You may already be in it. {e}", ephemeral=True)
+
+
+# --- Modals and Other Views (Service post remains the same) ---
 class JobPostModal(Modal, title='Post a New Job'):
     job_title = TextInput(label='Job Title', placeholder='Example: Need a Graphics Designer', required=True)
     description_and_tasks = TextInput(label='Job Description & Tasks', placeholder='Provide a detailed job description and list the specific tasks.', style=discord.TextStyle.paragraph, required=True)
@@ -20,16 +53,11 @@ class JobPostModal(Modal, title='Post a New Job'):
         if not job_channel:
             return await interaction.response.send_message("❌ Error: `#jobs-market` channel not found. Please create it.", ephemeral=True)
 
-        # --- PROFESSIONAL EMBED DESIGN ---
-        embed = discord.Embed(color=discord.Color.from_rgb(58, 138, 240)) # Blue accent color
+        embed = discord.Embed(color=discord.Color.from_rgb(58, 138, 240))
         embed.set_author(name=f"Hiring: {self.job_title.value}")
         
-        # Using block quotes (>) for a cleaner look
         processed_desc = self.description_and_tasks.value.replace('\n', '\n> ')
-        description_value = (
-            f"**Description**\n"
-            f"> {processed_desc}"
-        )
+        description_value = f"**Description**\n> {processed_desc}"
         embed.description = description_value
         
         embed.add_field(name="💰 Budget", value=self.job_budget.value, inline=True)
@@ -37,10 +65,10 @@ class JobPostModal(Modal, title='Post a New Job'):
         embed.add_field(name="📍 Location", value=self.location.value, inline=True)
         embed.add_field(name="👤 Client", value=interaction.user.mention, inline=True)
         
-        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
+        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
-        view = ApplyView() # Simple ApplyView for all jobs now
+        view = JobPostView() # Using the new Thread-based view
 
         verified_seller_role = discord.utils.get(interaction.guild.roles, name="verified seller")
         premium_seller_role = discord.utils.get(interaction.guild.roles, name="premium seller")
@@ -55,6 +83,7 @@ class JobPostModal(Modal, title='Post a New Job'):
         await interaction.response.send_message("✅ Your job has been posted successfully in #jobs-market!", ephemeral=True)
 
 class ServicePostModal(Modal, title='Post Your Service'):
+    # ... (No changes needed for this modal)
     service_title = TextInput(label='Service Title', placeholder='Example: Professional Logo Design', required=True)
     service_description = TextInput(label='Service Description', placeholder='Describe the service you are offering.', style=discord.TextStyle.paragraph, required=True)
     budget = TextInput(label='Budget / Pricing', placeholder='Example: Starts from $20', required=True)
@@ -73,17 +102,14 @@ class ServicePostModal(Modal, title='Post Your Service'):
         processed_exp = self.experience.value.replace('\n', '\n> ')
         description_string = (
             f"Offered by {interaction.user.mention}\n\n"
-            f"**Service Description**\n"
-            f"> {processed_desc}\n\n"
-            f"**My Experience**\n"
-            f"> {processed_exp}"
+            f"**Service Description**\n> {processed_desc}\n\n"
+            f"**My Experience**\n> {processed_exp}"
         )
         embed.description = description_string
 
         embed.add_field(name="💵 Pricing", value=self.budget.value, inline=True)
         embed.add_field(name="🚚 Delivery Time", value=self.delivery_time.value, inline=True)
-        
-        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif?ex=68c6e00b&is=68c58e8b&hm=e76af93097eb8b7bba87e29ee1676b0166239e2e4a5d7d72f586e61a91fad1e4&=")
+        embed.set_image(url="https://media.discordapp.net/attachments/1068195433589002401/1415359273902411806/marketplace.gif")
         embed.set_footer(text=f"User ID: {interaction.user.id}")
         
         view = ApplyView()
@@ -94,11 +120,11 @@ class ServicePostModal(Modal, title='Post Your Service'):
             await service_channel.create_thread(name=self.service_title.value, content=notification_content, embed=embed, view=view)
         else:
             await service_channel.send(content=notification_content, embed=embed, view=view)
-
         await interaction.response.send_message("✅ Your service has been posted successfully in #post-service!", ephemeral=True)
 
-# --- Views ---
+
 class ApplyView(View):
+    # ... (No changes needed here)
     def __init__(self):
         super().__init__(timeout=None)
     
@@ -109,6 +135,7 @@ class ApplyView(View):
         await interaction.response.send_message(f"To apply or hire, please open a middleman request ticket in the {support_mention} channel.", ephemeral=True)
 
 class JobServiceView(View):
+    # ... (No changes needed here)
     def __init__(self):
         super().__init__(timeout=None)
 
