@@ -51,10 +51,12 @@ async def update_job_embed_with_bids(interaction: discord.Interaction, message: 
     if original_embed.author:
         new_embed.set_author(name=original_embed.author.name, icon_url=original_embed.author.icon_url)
     
+    # Copy existing non-bid fields
     for field in original_embed.fields:
         if not field.name.startswith("Bids"):
             new_embed.add_field(name=field.name, value=field.value, inline=field.inline)
 
+    # Add the updated bids field
     if bids:
         bid_list_value = ""
         for bid in bids:
@@ -234,7 +236,7 @@ class JobPostModal(Modal, title='Post a New Job'):
         processed_desc = self.description_and_tasks.value.replace('\n', '\n> ')
         description_value = (
             f"**Description**\n"
-            f"> {processed_desc}\n\n"
+            f"> {processed_desc}"
         )
         embed.description = description_value
         
