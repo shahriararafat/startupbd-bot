@@ -22,17 +22,17 @@ intents.message_content = True
 
 # Importing All Persistent Views
 from cogs.ticket_system import TicketCreateView, TicketCloseView
-from cogs.job_service_system import JobServiceView, ApplyView, BiddingView # BiddingView import
+from cogs.job_service_system import JobServiceView, BiddingView # BiddingView import
 from cogs.profile_system import ApprovalView
-from utils import is_authorized 
+from utils import is_authorized # Permission checker import
 
 class MyClient(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
         self.permissions_filepath = "permissions.json"
         self.permissions = self.load_permissions()
-        self.command_channel_name = "🤖bot-command" 
-        self.profile_channel_name = "🔍find-profile" 
+        self.command_channel_name = "🤖bot-command" # General command channel
+        self.profile_channel_name = "🔍find-profile" # Specific channel for profile commands
 
     def load_permissions(self):
         if not os.path.exists(self.permissions_filepath):
@@ -46,6 +46,7 @@ class MyClient(commands.Bot):
         with open(self.permissions_filepath, 'w') as f:
             json.dump(self.permissions, f, indent=4)
 
+    # --- CORRECTED GLOBAL COMMAND CHECK ---
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type != discord.InteractionType.application_command:
             return await super().on_interaction(interaction)
@@ -60,7 +61,7 @@ class MyClient(commands.Bot):
             if profile_channel and interaction.channel.id == profile_channel.id:
                 return await super().on_interaction(interaction)
             else:
-                error_msg = f"The `/{command_name}` command can only be used in {profile_channel.mention}." if profile_channel else f"The `{self.profile_channel_name}` channel has not been set up."
+                error_msg = f"The `/{command_name}` command can only be used in {profile_channel.mention}." if profile_channel else f"The `{self.profile_channel_name}` channel has not been set up. Please contact an admin."
                 await interaction.response.send_message(error_msg, ephemeral=True)
                 return
         
@@ -69,7 +70,7 @@ class MyClient(commands.Bot):
             if command_channel and interaction.channel.id == command_channel.id:
                 return await super().on_interaction(interaction)
             else:
-                error_msg = f"Bot commands (except profile commands) can only be used in {command_channel.mention}." if command_channel else f"The `{self.command_channel_name}` channel has not been set up."
+                error_msg = f"Bot commands (except profile commands) can only be used in {command_channel.mention}." if command_channel else f"The `{self.command_channel_name}` channel has not been set up. Please contact an admin."
                 await interaction.response.send_message(error_msg, ephemeral=True)
                 return
 
