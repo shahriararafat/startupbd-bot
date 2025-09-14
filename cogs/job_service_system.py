@@ -205,9 +205,8 @@ class JobPostModal(Modal, title='Post a New Job'):
         embed = discord.Embed(color=discord.Color.from_rgb(58, 138, 240))
         embed.set_author(name=f"Hiring: {self.job_title.value}")
         
-        # Correctly format the description with block quotes
-        processed_desc = self.description_and_tasks.value.replace('\n', '\n> ')
-        description_value = f"**Description**\n> {processed_desc}"
+        # Format the description properly
+        description_value = f"**Description**\n{self.description_and_tasks.value}"
         embed.description = description_value
         
         embed.add_field(name="💰 Budget", value=self.job_budget.value, inline=True)
@@ -245,12 +244,11 @@ class ServicePostModal(Modal, title='Post Your Service'):
         embed = discord.Embed(color=discord.Color.from_rgb(3, 166, 84))
         embed.set_author(name=f"Service: {self.service_title.value}", icon_url=interaction.user.avatar.url if interaction.user.avatar else None)
         
-        processed_desc = self.service_description.value.replace('\n', '\n> ')
-        processed_exp = self.experience.value.replace('\n', '\n> ')
+        # Simplify the description to avoid formatting issues
         description_string = (
             f"Offered by {interaction.user.mention}\n\n"
-            f"**Service Description**\n> {processed_desc}\n\n"
-            f"**My Experience**\n> {processed_exp}"
+            f"**Service Description**\n{self.service_description.value}\n\n"
+            f"**My Experience**\n{self.experience.value}"
         )
         embed.description = description_string
 
@@ -264,13 +262,20 @@ class ServicePostModal(Modal, title='Post Your Service'):
         
         notification_content = f"New service available from {interaction.user.mention}"
 
-        if isinstance(service_channel, discord.ForumChannel):
-            await service_channel.create_thread(name=self.service_title.value, content=notification_content, embed=embed, view=view)
+        # Check if the channel is a forum channel or regular text channel
+        if hasattr(service_channel, 'create_thread') and callable(getattr(service_channel, 'create_thread')):
+            # It's a forum channel
+            await service_channel.create_thread(
+                name=self.service_title.value, 
+                content=notification_content, 
+                embed=embed, 
+                view=view
+            )
         else:
+            # It's a regular text channel
             await service_channel.send(content=notification_content, embed=embed, view=view)
 
         await interaction.response.send_message("✅ Your service has been posted successfully in #post-service!", ephemeral=True)
 
 async def setup(client):
     await client.add_cog(JobServiceSystem(client))
-
