@@ -42,8 +42,8 @@ class JobPostModal(Modal, title='Post a New Job'):
         
         view = ApplyView() # Simple ApplyView for all jobs now
 
-        verified_seller_role = discord.utils.get(interaction.guild.roles, name="verified seller")
-        premium_seller_role = discord.utils.get(interaction.guild.roles, name="premium seller")
+        verified_seller_role = discord.utils.get(interaction.guild.roles, name="Verified Seller")
+        premium_seller_role = discord.utils.get(interaction.guild.roles, name="Premium Seller")
         mentions = [r.mention for r in [verified_seller_role, premium_seller_role] if r]
         notification_content = f"New job posted! {' & '.join(mentions) if mentions else ''}"
 
