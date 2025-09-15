@@ -22,7 +22,7 @@ intents.message_content = True
 
 # Importing All Persistent Views
 from cogs.ticket_system import TicketCreateView, TicketCloseView
-from cogs.job_service_system import JobServiceView, ApplyView # Bidding/JobPost views removed
+from cogs.job_service_system import JobServiceView, ApplyView, JobPostView # JobPostView import kora hoyeche
 from cogs.profile_system import ApprovalView
 from utils import is_authorized 
 
@@ -80,6 +80,7 @@ class MyClient(commands.Bot):
         self.add_view(JobServiceView())
         self.add_view(ApplyView())
         self.add_view(ApprovalView())
+        self.add_view(JobPostView()) # Notun JobPostView register kora hoyeche
 
         # Loading all cogs from the 'cogs' folder
         for filename in os.listdir('./cogs'):
