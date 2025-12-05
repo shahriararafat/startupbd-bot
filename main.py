@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # BOT TOKEN IS NOW BEING PULLED FROM ENVIRONMENT VARIABLES
-BOT_TOKEN = os.getenv("AIzaSyBVk1Wj5y6pX2w-9kVOUnV1CaYxNynP8DY")
+BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("DISCORD_TOKEN not found! Please set it in your .env file or environment variables.")
 
@@ -88,7 +88,7 @@ class MyClient(commands.Bot):
                 print(f"{filename} has been loaded.")
     
     async def on_ready(self):
-        game = discord.Game("Startup Ban")
+        game = discord.Game("Startup Bangladesh")
         await self.change_presence(status=discord.Status.online, activity=game)
         
         await self.tree.sync()
