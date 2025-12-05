@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # BOT TOKEN IS NOW BEING PULLED FROM ENVIRONMENT VARIABLES
-BOT_TOKEN = os.getenv("DISCORD_TOKEN")
+BOT_TOKEN = os.getenv("AIzaSyBVk1Wj5y6pX2w-9kVOUnV1CaYxNynP8DY")
 if not BOT_TOKEN:
     raise ValueError("DISCORD_TOKEN not found! Please set it in your .env file or environment variables.")
 
