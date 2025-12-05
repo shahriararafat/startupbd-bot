@@ -88,7 +88,7 @@ class MyClient(commands.Bot):
                 print(f"{filename} has been loaded.")
     
     async def on_ready(self):
-        game = discord.Game("Startup Bangladesh")
+        game = discord.Game("Startup Ban")
         await self.change_presence(status=discord.Status.online, activity=game)
         
         await self.tree.sync()
