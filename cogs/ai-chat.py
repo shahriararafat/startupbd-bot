@@ -10,7 +10,7 @@ class AIChat(commands.Cog):
         self.client = client
         
         # --- GOOGLE GEMINI AI SETUP ---
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = os.getenv("AIzaSyBVk1Wj5y6pX2w-9kVOUnV1CaYxNynP8DY")
         if api_key:
             genai.configure(api_key=api_key)
             # Using Gemini 1.5 Flash model for speed
