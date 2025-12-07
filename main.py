@@ -1,98 +1,118 @@
-# main.py
+# cogs/ai_chat.py
 import discord
-import os
-import json
 from discord.ext import commands
+import os
+import asyncio
 from dotenv import load_dotenv
 
-load_dotenv()
+# --- SAFE IMPORT ---
+try:
+    import google.generativeai as genai
+    HAS_AI_LIB = True
+except ImportError as e:
+    HAS_AI_LIB = False
+    print(f"❌ CRITICAL ERROR: 'google-generativeai' library is MISSING. Error: {e}")
 
-# BOT TOKEN IS NOW BEING PULLED FROM ENVIRONMENT VARIABLES
-BOT_TOKEN = os.getenv("DISCORD_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("DISCORD_TOKEN not found! Please set it in your .env file or environment variables.")
-
-# INTENTS CONFIGURATION
-intents = discord.Intents.default()
-intents.messages = True
-intents.guilds = True
-intents.members = True
-intents.message_content = True 
-
-# Importing All Persistent Views
-from cogs.ticket_system import TicketCreateView, TicketCloseView
-from cogs.job_service_system import JobServiceView, ApplyView # Bidding/JobPost views removed
-from cogs.profile_system import ApprovalView
-from utils import is_authorized 
-
-class MyClient(commands.Bot):
-    def __init__(self):
-        super().__init__(command_prefix="!", intents=intents)
-        self.permissions_filepath = "permissions.json"
-        self.permissions = self.load_permissions()
-        self.command_channel_name = "🤖bot-command" 
-        self.profile_channel_name = "🔍find-profile" 
-
-    def load_permissions(self):
-        if not os.path.exists(self.permissions_filepath):
-            with open(self.permissions_filepath, 'w') as f:
-                json.dump({"allowed_users": [], "allowed_roles": []}, f)
-            return {"allowed_users": [], "allowed_roles": []}
-        with open(self.permissions_filepath, 'r') as f:
-            return json.load(f)
-
-    def save_permissions(self):
-        with open(self.permissions_filepath, 'w') as f:
-            json.dump(self.permissions, f, indent=4)
-
-    async def on_interaction(self, interaction: discord.Interaction):
-        if interaction.type != discord.InteractionType.application_command:
-            return await super().on_interaction(interaction)
-
-        if is_authorized(interaction):
-            return await super().on_interaction(interaction)
-
-        command_name = interaction.data.get("name")
+class AIChat(commands.Cog):
+    def __init__(self, client):
+        self.client = client
+        self.model = None
+        self.api_key_status = "Not Initialized"
         
-        if command_name in ["profile", "setprofile", "deleteprofile"]:
-            profile_channel = discord.utils.get(interaction.guild.channels, name=self.profile_channel_name)
-            if profile_channel and interaction.channel.id == profile_channel.id:
-                return await super().on_interaction(interaction)
-            else:
-                error_msg = f"The `/{command_name}` command can only be used in {profile_channel.mention}." if profile_channel else f"The `{self.profile_channel_name}` channel has not been set up."
-                await interaction.response.send_message(error_msg, ephemeral=True)
-                return
-        
+        if HAS_AI_LIB:
+            self.setup_ai()
         else:
-            command_channel = discord.utils.get(interaction.guild.channels, name=self.command_channel_name)
-            if command_channel and interaction.channel.id == command_channel.id:
-                return await super().on_interaction(interaction)
-            else:
-                error_msg = f"Bot commands (except profile commands) can only be used in {command_channel.mention}." if command_channel else f"The `{self.command_channel_name}` channel has not been set up."
-                await interaction.response.send_message(error_msg, ephemeral=True)
+            self.api_key_status = "Library Missing"
+
+    def setup_ai(self):
+        load_dotenv()
+        
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            self.api_key_status = "Missing Key"
+            print("⚠️ Warning: GOOGLE_API_KEY not found in environment variables.")
+            return
+
+        try:
+            genai.configure(api_key=api_key)
+            # Using 'gemini-1.5-flash' which is fast and free-tier friendly
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.api_key_status = "Active & Configured"
+            print("✅ AI Chat Module: Successfully connected to Google Gemini.")
+        except Exception as e:
+            self.api_key_status = f"Config Error: {str(e)}"
+            print(f"❌ AI Chat Configuration Error: {e}")
+
+    # --- System Instruction ---
+    SYSTEM_INSTRUCTION = (
+        "You are a professional AI Business Consultant for 'Startup Bangladesh'. "
+        "Your role is to assist users with startups, entrepreneurship, business strategies, "
+        "marketing, finance, and professional career advice.\n"
+        "RULES:\n"
+        "1. Answer ONLY business-related questions.\n"
+        "2. Be concise, professional, and helpful.\n"
+        "3. If a user asks about non-business topics, politely refuse."
+    )
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot or not message.guild:
+            return
+
+        if message.channel.name != "ai-chat":
+            return
+
+        if not HAS_AI_LIB:
+            await message.reply("⚠️ System Error: AI library is missing on the server.")
+            return
+
+        if not self.model:
+            self.setup_ai()
+            if not self.model:
+                await message.reply("⚠️ AI System is currently offline (Configuration Issue). Please contact an Admin.")
                 return
 
-    async def setup_hook(self) -> None:
-        # Registering all persistent views
-        self.add_view(TicketCreateView())
-        self.add_view(TicketCloseView())
-        self.add_view(JobServiceView())
-        self.add_view(ApplyView())
-        self.add_view(ApprovalView())
+        async with message.channel.typing():
+            try:
+                full_prompt = f"{self.SYSTEM_INSTRUCTION}\n\nUser: {message.content}"
+                
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(None, lambda: self.model.generate_content(full_prompt))
+                
+                response_text = response.text
+                if len(response_text) > 2000:
+                    await message.reply(response_text[:1990] + "... (truncated)")
+                else:
+                    await message.reply(response_text)
 
-        # Loading all cogs from the 'cogs' folder
-        for filename in os.listdir('./cogs'):
-            if filename.endswith('.py'):
-                await self.load_extension(f'cogs.{filename[:-3]}')
-                print(f"{filename} has been loaded.")
-    
-    async def on_ready(self):
-        game = discord.Game("Startup Bangladesh")
-        await self.change_presence(status=discord.Status.online, activity=game)
+            except Exception as e:
+                # --- DEBUGGING: SHOW ACTUAL ERROR TO USER ---
+                error_msg = str(e)
+                print(f"❌ AI Generation Error: {e}")
+                
+                if "400" in error_msg or "INVALID_ARGUMENT" in error_msg:
+                    await message.reply("⚠️ **AI Error:** Invalid API Key or Model Name. Please check your Google API Key.")
+                elif "403" in error_msg or "PERMISSION_DENIED" in error_msg:
+                    await message.reply("⚠️ **AI Error:** Permission Denied. Your API Key might not have access to this model.")
+                elif "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                    await message.reply("⚠️ **AI Error:** Quota Exceeded. You are sending too many requests.")
+                else:
+                    # Show the raw error for debugging
+                    await message.reply(f"⚠️ **Technical Error:** `{error_msg}`")
+
+    @commands.command(name="aicheck", description="Check AI system status.")
+    @commands.has_permissions(administrator=True)
+    async def ai_check(self, ctx):
+        embed = discord.Embed(title="🤖 AI System Status", color=discord.Color.blue())
+        embed.add_field(name="Library Installed", value="✅ Yes" if HAS_AI_LIB else "❌ NO (Run pip install)", inline=False)
+        embed.add_field(name="API Key Status", value=self.api_key_status, inline=False)
         
-        await self.tree.sync()
-        print(f'Logged in as {self.user} and all commands are synced.')
+        # Check if the key is actually loaded in env
+        masked_key = os.getenv("GOOGLE_API_KEY")
+        key_vis = f"Ends with ...{masked_key[-4:]}" if masked_key else "Not Found in ENV"
+        
+        embed.add_field(name="Env Variable", value=key_vis, inline=False)
+        await ctx.send(embed=embed)
 
-client = MyClient()
-client.run(BOT_TOKEN)
-
+async def setup(client):
+    await client.add_cog(AIChat(client))
