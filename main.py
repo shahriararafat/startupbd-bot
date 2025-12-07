@@ -4,9 +4,7 @@ import os
 import json
 from discord.ext import commands
 from dotenv import load_dotenv
-import gemini_helper
 
-# Loading environment variables from .env file
 load_dotenv()
 
 # BOT TOKEN IS NOW BEING PULLED FROM ENVIRONMENT VARIABLES
