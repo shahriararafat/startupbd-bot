@@ -43,8 +43,10 @@ class AIChat(commands.Cog):
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             }
             
+            # --- MODEL CHANGED TO 'gemini-pro' ---
+            # 'gemini-1.5-flash' error dicchilo, tai 'gemini-pro' deya holo ja sobcheye stable.
             self.model = genai.GenerativeModel(
-                'gemini-1.5-flash',
+                'gemini-pro',
                 safety_settings=safety_settings
             )
             self.api_key_status = "Active & Configured"
@@ -52,6 +54,8 @@ class AIChat(commands.Cog):
             self.api_key_status = f"Config Error: {e}"
 
     # --- System Instruction ---
+    # Note: 'gemini-pro' directly supports system instructions in the prompt slightly differently,
+    # so we prepend it to the user message manually in on_message.
     SYSTEM_INSTRUCTION = (
         "You are a professional AI Business Consultant for 'Startup Bangladesh'. "
         "Your role is to assist users with startups, entrepreneurship, business strategies, "
@@ -84,7 +88,8 @@ class AIChat(commands.Cog):
 
         async with message.channel.typing():
             try:
-                full_prompt = f"{self.SYSTEM_INSTRUCTION}\n\nUser: {message.content}"
+                # Combining System Instruction with User Message manually for gemini-pro
+                full_prompt = f"{self.SYSTEM_INSTRUCTION}\n\nUser Question: {message.content}"
                 
                 # Running in executor to prevent bot freezing
                 loop = asyncio.get_running_loop()
@@ -95,12 +100,11 @@ class AIChat(commands.Cog):
                 
                 # Check for Safety Blocks (Empty response)
                 if not response.parts:
-                    # If response is blocked, show why
                     try:
                         feedback = response.prompt_feedback
-                        await message.reply(f"⚠️ **AI Response Blocked by Safety Filters.**\nReason: `{feedback}`")
+                        await message.reply(f"⚠️ **AI Response Blocked.**\nReason: `{feedback}`")
                     except:
-                        await message.reply("⚠️ **AI Error:** Empty response received from Google. (Likely Safety Block)")
+                        await message.reply("⚠️ **AI Error:** Empty response received from Google.")
                     return
 
                 # Send response
@@ -112,7 +116,6 @@ class AIChat(commands.Cog):
 
             except Exception as e:
                 # --- SHOW REAL ERROR ---
-                # Ekhon amra asol error ta dekhte pabo
                 print(f"AI Error: {e}")
                 await message.reply(f"⚠️ **Technical Error Occurred:**\n```{str(e)}```\n*Please show this error to the admin.*")
 
@@ -122,7 +125,7 @@ class AIChat(commands.Cog):
         embed = discord.Embed(title="🤖 AI System Status", color=discord.Color.blue())
         embed.add_field(name="Library Installed", value="✅ Yes" if HAS_AI_LIB else "❌ NO", inline=False)
         embed.add_field(name="API Key Status", value=self.api_key_status, inline=False)
-        embed.add_field(name="Model Ready", value="✅ Yes" if self.model else "❌ No", inline=False)
+        embed.add_field(name="Model Ready", value="✅ Yes (gemini-pro)" if self.model else "❌ No", inline=False)
         await ctx.send(embed=embed)
 
 async def setup(client):
