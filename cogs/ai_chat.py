@@ -42,39 +42,6 @@ class AIChat(commands.Cog):
         try:
             genai.configure(api_key=api_key)
             
-            # --- DYNAMIC MODEL SELECTION (SMART FIX) ---
-            # Amra API ke jiggesh korbo ki ki model available ache
-            available_models = []
-            try:
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
-            except Exception as e:
-                self.api_key_status = f"List Error: {e}"
-                print(f"❌ Failed to list models: {e}")
-                return
-
-            # Priority selection logic
-            target_model = None
-            
-            # Priority 1: Gemini 1.5 Flash (Fastest)
-            if 'models/gemini-1.5-flash' in available_models:
-                target_model = 'gemini-1.5-flash'
-            # Priority 2: Gemini Pro (Stable)
-            elif 'models/gemini-pro' in available_models:
-                target_model = 'gemini-pro'
-            # Priority 3: Gemini 1.0 Pro
-            elif 'models/gemini-1.0-pro' in available_models:
-                target_model = 'gemini-1.0-pro'
-            # Fallback: Take the first available text model
-            elif available_models:
-                target_model = available_models[0].replace('models/', '')
-            
-            if not target_model:
-                self.api_key_status = "No Text Models Found. Check API Key permissions."
-                print(f"⚠️ No text generation models found in: {available_models}")
-                return
-
             # --- SAFETY SETTINGS ---
             safety_settings = {
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -82,14 +49,23 @@ class AIChat(commands.Cog):
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             }
+
+            # --- FORCE CONNECTION STRATEGY ---
+            # Screen shot e dekha geche 'list_models' 400 error dicche (Region Block).
+            # Tai amra list check na kore shorasori 'gemini-1.5-flash' model e connect korbo.
+            # Jodi 1.5 flash na pay, tobe 'gemini-pro' try korbo.
             
-            self.model = genai.GenerativeModel(
-                target_model,
-                safety_settings=safety_settings
-            )
-            self.model_name = target_model
-            self.api_key_status = "Active & Configured"
-            print(f"✅ AI System Connected using model: {target_model}")
+            try:
+                self.model = genai.GenerativeModel('gemini-1.5-flash', safety_settings=safety_settings)
+                self.model_name = "gemini-1.5-flash (Forced)"
+                self.api_key_status = "Active (Forced)"
+            except:
+                # Fallback to gemini-pro
+                self.model = genai.GenerativeModel('gemini-pro', safety_settings=safety_settings)
+                self.model_name = "gemini-pro (Fallback)"
+                self.api_key_status = "Active (Fallback)"
+            
+            print(f"✅ AI System Forced Connection: {self.model_name}")
             
         except Exception as e:
             self.api_key_status = f"Config Error: {e}"
@@ -147,8 +123,14 @@ class AIChat(commands.Cog):
                     await message.reply(response_text)
 
             except Exception as e:
-                print(f"AI Error: {e}")
-                await message.reply(f"⚠️ **Error:** `{str(e)}`")
+                error_msg = str(e)
+                print(f"AI Error: {error_msg}")
+                
+                # Handling Region Block Error
+                if "400" in error_msg and "location" in error_msg.lower():
+                    await message.reply("❌ **Region Error:** Your Server/VM location is blocked by Google AI.\n**Fix:** Please verify your Azure VM region supports Google Gemini API.")
+                else:
+                    await message.reply(f"⚠️ **Error:** `{error_msg}`")
 
     @commands.command(name="aicheck", description="Check AI system status.")
     @commands.has_permissions(administrator=True)
@@ -158,7 +140,7 @@ class AIChat(commands.Cog):
         masked_key = os.getenv("GOOGLE_API_KEY")
         key_status = f"✅ Loaded (...{masked_key[-4:]})" if masked_key else "❌ Not Found"
         embed.add_field(name="🔑 API Key", value=key_status, inline=True)
-        embed.add_field(name="🧠 Selected Model", value=f"`{self.model_name}`", inline=False)
+        embed.add_field(name="🧠 Model Status", value=f"`{self.model_name}`", inline=False)
         
         # Live Test
         if self.model:
