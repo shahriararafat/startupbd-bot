@@ -161,6 +161,10 @@ class Moderation(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
+        # Owner bypass — no restrictions at all
+        if message.author.id == 759445506426142781:
+            return
+
         author = message.author
         content_lower = message.content.lower()
 
