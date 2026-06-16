@@ -28,6 +28,15 @@ BANNED_WORDS = [
     "shala", "shali", "chudirbhai", "mathachoda", "chodna", "baal", "kuttar baccha", "haramir baccha"
 ]
 
+# --- Job Post Moderation Configuration ---
+JOB_KEYWORDS = [
+    "hiring", "need a developer", "need a designer", "need a video editor", 
+    "paid project", "paid work", "looking for a developer", "looking for a designer", 
+    "looking for an editor", "budget:", "freelance project", "need dev", 
+    "need developer", "need designer", "kauke lagbe", "looking for dev"
+]
+ALLOWED_JOB_CHANNELS = ["marketplace", "post-service", "job", "jobs", "job-board", "hiring"]
+
 # AI Moderation Thresholds (from 0.0 to 1.0)
 HIGH_THRESHOLD = 0.8
 MODERATE_THRESHOLD = 0.7
@@ -148,6 +157,21 @@ class Moderation(commands.Cog):
                     print(f"Could not DM {author.name} (ID: {author.id}). They may have DMs disabled.")
             except Exception as e:
                 print(f"Banned word filter error: {e}")
+                
+        # --- 3. Job Post Filter ---
+        if message.channel.name not in ALLOWED_JOB_CHANNELS:
+            if any(keyword in content_lower for keyword in JOB_KEYWORDS):
+                try:
+                    await message.delete()
+                    warning_msg = f"Hey {author.mention}, you cannot post job or service posts in general channels. Please use <#1415292502671491102> for that."
+                    await message.channel.send(warning_msg, delete_after=15)
+                    try:
+                        await author.send(f"You cannot post job or service posts in general channels. Please use the designated channel in **{message.guild.name}** for that.")
+                    except discord.Forbidden:
+                        pass
+                    return
+                except Exception as e:
+                    print(f"Job post filter error: {e}")
 
     # --- Manual Moderation Commands ---
     # ... (warn, timeout, kick, ban commands are the same)
