@@ -7,6 +7,7 @@ import json
 import os
 import datetime
 import asyncio
+import re
 from utils import is_authorized
 from dotenv import load_dotenv
 
@@ -30,12 +31,46 @@ BANNED_WORDS = [
 
 # --- Job Post Moderation Configuration ---
 JOB_KEYWORDS = [
-    "hiring", "need a developer", "need a designer", "need a video editor", 
-    "paid project", "paid work", "looking for a developer", "looking for a designer", 
-    "looking for an editor", "budget:", "freelance project", "need dev", 
-    "need developer", "need designer", "kauke lagbe", "looking for dev"
+    # English keywords
+    "hiring", "we are hiring", "we're hiring", "job opportunity", "job opportunities",
+    "remote job", "remote work", "jobs available", "vacancy", "vacancies",
+    "need a developer", "need a designer", "need a video editor",
+    "paid project", "paid work", "looking for a developer", "looking for a designer",
+    "looking for an editor", "freelance project", "freelance work",
+    "need developer", "need designer", "need dev", "looking for dev",
+    "send a private message", "dm for details", "dm me for", "send dm",
+    "interested? send", "interested? dm", "apply now", "join our team",
+    "data entry", "copy & paste", "copy and paste",
+    # Bangla keywords
+    "kauke lagbe", "developer lagbe", "designer lagbe", "editor lagbe",
+    "kaj ache", "kaj korbe", "worker lagbe", "lokjon lagbe",
+    "chakri", "job korte", "income korte", "earn korte", "earn koro",
+    "kaj dorkar", "dorkar ache"
 ]
+
+# Regex patterns to detect price/rate mentions common in job spam
+JOB_PATTERNS = [
+    re.compile(r'\$\d+[\s\-/]', re.IGNORECASE),          # $25/ or $25- or $25 
+    re.compile(r'\$\d+\s*/\s*hr', re.IGNORECASE),         # $25/hr
+    re.compile(r'\d+\s*/\s*hr', re.IGNORECASE),            # 25/hr
+    re.compile(r'\$\d+\s*-\s*\$?\d+', re.IGNORECASE),     # $25-$30 or $25-30
+    re.compile(r'per\s*hour', re.IGNORECASE),               # per hour
+]
+
 ALLOWED_JOB_CHANNELS = ["marketplace", "post-service", "job", "jobs", "job-board", "hiring"]
+
+# --- DM Solicitation Filter ---
+DM_KEYWORDS = [
+    "dm me", "dm for", "dm sent", "check dm", "check your dm",
+    "private message", "private talk", "privet talk", "privet message",
+    "inbox me", "inbox koro", "inbox check", "inbox dao", "inbox dao",
+    "message me privately", "send me a dm", "text me privately",
+    "pm me", "pm sent", "check pm", "personal message",
+    "knock me", "knock inbox", "inbox a aso", "inbox e aso",
+]
+
+# Punishment log channel ID
+PUNISHMENT_LOG_CHANNEL_ID = 1415794024085721108
 
 # AI Moderation Thresholds (from 0.0 to 1.0)
 HIGH_THRESHOLD = 0.8
@@ -46,6 +81,7 @@ class Moderation(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.cases_filepath = "punishment_cases.json"
+        self.dm_offenses = {}  # Tracks DM solicitation offenses: {user_id: count}
         
         self.api_key = os.getenv("PERSPECTIVE_API_KEY")
         if self.api_key and discovery:
@@ -88,6 +124,15 @@ class Moderation(commands.Cog):
         except Exception as e:
             print(f"Error sending to log channel: {e}")
 
+    # --- Helper to get ordinal string (1st, 2nd, 3rd...) ---
+    @staticmethod
+    def ordinal(n):
+        if 11 <= (n % 100) <= 13:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+        return f"{n}{suffix}"
+
     # --- AI Message Analysis Function ---
     async def analyze_message(self, text: str) -> dict:
         if not self.perspective_client or not text.strip():
@@ -113,12 +158,69 @@ class Moderation(commands.Cog):
     # --- Auto-Moderation Listener ---
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot or not message.guild or (isinstance(message.author, discord.Member) and message.author.guild_permissions.administrator):
+        if message.author.bot or not message.guild:
             return
 
         author = message.author
-        
-        # --- 1. AI Moderation Check ---
+        content_lower = message.content.lower()
+
+        # --- 1. Job Post Filter (applies to everyone, including admins) ---
+        if message.channel.name not in ALLOWED_JOB_CHANNELS:
+            is_job_post = False
+            # Check keyword match
+            matched_keyword = next((kw for kw in JOB_KEYWORDS if kw in content_lower), None)
+            if matched_keyword:
+                is_job_post = True
+            # Check regex pattern match (price/rate patterns)
+            if not is_job_post:
+                for pattern in JOB_PATTERNS:
+                    if pattern.search(message.content):
+                        is_job_post = True
+                        break
+            
+            if is_job_post:
+                try:
+                    await message.delete()
+                    warning_msg = f"Hey {author.mention}, you cannot post job or service posts in general channels. Please use <#1415292502671491102> for that."
+                    await message.channel.send(warning_msg, delete_after=15)
+                    try:
+                        await author.send(f"You cannot post job or service posts in general channels. Please use the designated channel in **{message.guild.name}** for that.")
+                    except discord.Forbidden:
+                        pass
+                    return
+                except Exception as e:
+                    print(f"Job post filter error: {e}")
+
+        # --- 2. DM Solicitation Filter (applies to everyone, including admins) ---
+        if any(keyword in content_lower for keyword in DM_KEYWORDS):
+            user_id = author.id
+            self.dm_offenses[user_id] = self.dm_offenses.get(user_id, 0) + 1
+            offense_count = self.dm_offenses[user_id]
+
+            if offense_count >= 2:
+                duration = datetime.timedelta(hours=1)
+                duration_str = "1 hour"
+            else:
+                duration = datetime.timedelta(minutes=15)
+                duration_str = "15 minutes"
+
+            try:
+                await message.delete()
+                warning_msg = f"⚠️ {author.mention}, you are not allowed to solicit DMs or private messages here. This is your **{self.ordinal(offense_count)} offense**. You have been muted for **{duration_str}**."
+                await message.channel.send(warning_msg, delete_after=20)
+                await author.timeout(duration, reason=f"DM solicitation (Offense #{offense_count})")
+                await self.log_punishment(message, f"Timeout ({duration_str})", author, self.client.user, f"DM solicitation detected (Offense #{offense_count})", color=discord.Color.red())
+                return
+            except discord.Forbidden:
+                print(f"Failed to timeout {author.name}. Check bot's role hierarchy.")
+            except Exception as e:
+                print(f"DM solicitation filter error: {e}")
+
+        # Skip remaining moderation for admins
+        if isinstance(message.author, discord.Member) and message.author.guild_permissions.administrator:
+            return
+
+        # --- 2. AI Moderation Check ---
         scores = await self.analyze_message(message.content)
         if scores:
             duration, duration_str, reason = None, None, None
@@ -145,8 +247,7 @@ class Moderation(commands.Cog):
                 except Exception as e:
                     print(f"AI auto-mod error: {e}")
                     
-        # --- 2. Banned Word Filter ---
-        content_lower = message.content.lower()
+        # --- 3. Banned Word Filter ---
         if any(word in content_lower for word in BANNED_WORDS):
             try:
                 await message.delete()
@@ -157,21 +258,6 @@ class Moderation(commands.Cog):
                     print(f"Could not DM {author.name} (ID: {author.id}). They may have DMs disabled.")
             except Exception as e:
                 print(f"Banned word filter error: {e}")
-                
-        # --- 3. Job Post Filter ---
-        if message.channel.name not in ALLOWED_JOB_CHANNELS:
-            if any(keyword in content_lower for keyword in JOB_KEYWORDS):
-                try:
-                    await message.delete()
-                    warning_msg = f"Hey {author.mention}, you cannot post job or service posts in general channels. Please use <#1415292502671491102> for that."
-                    await message.channel.send(warning_msg, delete_after=15)
-                    try:
-                        await author.send(f"You cannot post job or service posts in general channels. Please use the designated channel in **{message.guild.name}** for that.")
-                    except discord.Forbidden:
-                        pass
-                    return
-                except Exception as e:
-                    print(f"Job post filter error: {e}")
 
     # --- Manual Moderation Commands ---
     # ... (warn, timeout, kick, ban commands are the same)
