@@ -54,6 +54,10 @@ class MyClient(commands.Bot):
 
         command_name = interaction.data.get("name")
         
+        # Commands allowed in any channel (not restricted to bot-command)
+        if command_name in ["private"]:
+            return await super().on_interaction(interaction)
+
         if command_name in ["profile", "setprofile", "deleteprofile"]:
             profile_channel = discord.utils.get(interaction.guild.channels, name=self.profile_channel_name)
             if profile_channel and interaction.channel.id == profile_channel.id:
