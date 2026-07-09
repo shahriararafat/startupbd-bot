@@ -23,6 +23,7 @@ intents.message_content = True
 from cogs.ticket_system import TicketCreateView, TicketCloseView
 from cogs.job_service_system import JobServiceView, ApplyView # Bidding/JobPost views removed
 from cogs.profile_system import ApprovalView
+from cogs.startup_showcase import ShowcaseVoteView
 from utils import is_authorized 
 
 class MyClient(commands.Bot):
@@ -63,7 +64,7 @@ class MyClient(commands.Bot):
                 return
 
         # Commands allowed in any channel (not restricted to bot-command)
-        if command_name in ["private", "founder", "channel"]:
+        if command_name in ["private", "founder", "channel", "showcase"]:
             return await super().on_interaction(interaction)
 
         if command_name in ["profile", "setprofile", "deleteprofile"]:
@@ -91,6 +92,7 @@ class MyClient(commands.Bot):
         self.add_view(JobServiceView())
         self.add_view(ApplyView())
         self.add_view(ApprovalView())
+        self.add_view(ShowcaseVoteView())
 
         # Loading all cogs from the 'cogs' folder
         for filename in os.listdir('./cogs'):
