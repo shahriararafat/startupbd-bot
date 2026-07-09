@@ -55,7 +55,7 @@ class MyClient(commands.Bot):
         command_name = interaction.data.get("name")
         
         # Commands allowed in any channel (not restricted to bot-command)
-        if command_name in ["private"]:
+        if command_name in ["private", "founder", "channel"]:
             return await super().on_interaction(interaction)
 
         if command_name in ["profile", "setprofile", "deleteprofile"]:
