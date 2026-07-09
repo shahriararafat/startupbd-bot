@@ -26,6 +26,12 @@ MODE_DESCRIPTIONS = {
     "links_only":        "🔗 Links Only — Only URLs allowed",
     "no_links":          "🚫🔗 No Links — URLs are not allowed",
     "no_files":          "🚫📎 No Files — File attachments not allowed",
+    "no_bot_commands":   "🚫🤖 No Bot Commands — Bot commands are not allowed",
+    "no_text":           "🚫📝 No Text — Plain text messages are not allowed",
+    "no_images":         "🚫🖼️ No Images — Images are not allowed",
+    "no_videos":         "🚫🎬 No Videos — Videos are not allowed",
+    "no_media":          "🚫📸 No Media — Images and videos are not allowed",
+    "no_stickers":       "🚫😀 No Stickers — Stickers are not allowed",
     "read_only":         "👀 Read Only — Only Founders can send messages",
     "locked":            "🔒 Locked — No messages allowed",
     "custom":            "⚙️ Custom — Configurable content types",
@@ -41,6 +47,12 @@ MODE_VIOLATIONS = {
     "links_only":        "This channel only allows **messages containing links**.",
     "no_links":          "**Links are not allowed** in this channel.",
     "no_files":          "**File attachments are not allowed** in this channel.",
+    "no_bot_commands":   "**Bot commands are not allowed** in this channel.",
+    "no_text":           "**Plain text messages are not allowed** in this channel.",
+    "no_images":         "**Images are not allowed** in this channel.",
+    "no_videos":         "**Videos are not allowed** in this channel.",
+    "no_media":          "**Images and videos are not allowed** in this channel.",
+    "no_stickers":       "**Stickers are not allowed** in this channel.",
     "read_only":         "This channel is **read-only**. Only Founders can send messages.",
     "locked":            "This channel is **locked**. No messages are allowed.",
     "custom":            "Your message does not match the **allowed content types** for this channel.",
@@ -56,6 +68,12 @@ _MODE_CHOICES = [
     app_commands.Choice(name="🔗 Links Only",                   value="links_only"),
     app_commands.Choice(name="🚫 No Links",                     value="no_links"),
     app_commands.Choice(name="🚫 No Files",                     value="no_files"),
+    app_commands.Choice(name="🚫 No Bot Commands",              value="no_bot_commands"),
+    app_commands.Choice(name="🚫 No Text",                      value="no_text"),
+    app_commands.Choice(name="🚫 No Images",                    value="no_images"),
+    app_commands.Choice(name="🚫 No Videos",                    value="no_videos"),
+    app_commands.Choice(name="🚫 No Media (Images + Videos)",   value="no_media"),
+    app_commands.Choice(name="🚫 No Stickers",                  value="no_stickers"),
     app_commands.Choice(name="👀 Read Only (Founders only)",    value="read_only"),
     app_commands.Choice(name="🔒 Locked",                       value="locked"),
     app_commands.Choice(name="⚙️ Custom",                       value="custom"),
@@ -275,6 +293,37 @@ class ChannelPolicy(commands.Cog):
             # Must NOT contain attachments
             if self._has_attachments(message):
                 return MODE_VIOLATIONS["no_files"]
+
+        elif mode == "no_bot_commands":
+            # Must NOT start with the bot prefix
+            prefix = getattr(self.client, "command_prefix", "!")
+            if message.content.startswith(prefix):
+                return MODE_VIOLATIONS["no_bot_commands"]
+
+        elif mode == "no_text":
+            # Must NOT contain plain text messages
+            if message.content.strip():
+                return MODE_VIOLATIONS["no_text"]
+
+        elif mode == "no_images":
+            # Must NOT contain images
+            if self._has_images(message):
+                return MODE_VIOLATIONS["no_images"]
+
+        elif mode == "no_videos":
+            # Must NOT contain videos
+            if self._has_videos(message):
+                return MODE_VIOLATIONS["no_videos"]
+
+        elif mode == "no_media":
+            # Must NOT contain images or videos
+            if self._has_images(message) or self._has_videos(message):
+                return MODE_VIOLATIONS["no_media"]
+
+        elif mode == "no_stickers":
+            # Must NOT contain stickers
+            if self._has_stickers(message):
+                return MODE_VIOLATIONS["no_stickers"]
 
         elif mode == "read_only":
             # Only founders can send (founder check is done in the listener,
