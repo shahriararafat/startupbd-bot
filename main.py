@@ -54,16 +54,24 @@ class MyClient(commands.Bot):
 
         command_name = interaction.data.get("name")
         
+        # Dedicated Profile Channel Check (ID: 1416508832775012497)
+        if interaction.channel and interaction.channel.id == 1416508832775012497:
+            if command_name in ["profile", "setprofile", "deleteprofile"]:
+                return await super().on_interaction(interaction)
+            else:
+                await interaction.response.send_message("❌ Only `/profile`, `/setprofile`, and `/deleteprofile` commands can be used in <#1416508832775012497>.", ephemeral=True)
+                return
+
         # Commands allowed in any channel (not restricted to bot-command)
         if command_name in ["private", "founder", "channel"]:
             return await super().on_interaction(interaction)
 
         if command_name in ["profile", "setprofile", "deleteprofile"]:
             profile_channel = discord.utils.get(interaction.guild.channels, name=self.profile_channel_name)
-            if profile_channel and interaction.channel.id == profile_channel.id:
+            if (profile_channel and interaction.channel.id == profile_channel.id) or (interaction.channel and interaction.channel.id == 1416508832775012497):
                 return await super().on_interaction(interaction)
             else:
-                error_msg = f"The `/{command_name}` command can only be used in {profile_channel.mention}." if profile_channel else f"The `{self.profile_channel_name}` channel has not been set up."
+                error_msg = f"The `/{command_name}` command can only be used in <#1416508832775012497>."
                 await interaction.response.send_message(error_msg, ephemeral=True)
                 return
         

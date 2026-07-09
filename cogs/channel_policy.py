@@ -618,6 +618,22 @@ class ChannelPolicy(commands.Cog):
         # --- Founders always bypass ---
         if self._is_founder(message.author.id):
             return
+
+        # --- Enforce dedicated profile channel (1416508832775012497) ---
+        if message.channel.id == 1416508832775012497:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            try:
+                await message.channel.send(
+                    f"⚠️ {message.author.mention}, your message was removed.\n**Reason:** Only `/profile`, `/setprofile`, and `/deleteprofile` commands can be used in this channel.",
+                    delete_after=8,
+                )
+            except Exception:
+                pass
+            return
+
         # --- Check if channel has a policy ---
         policy = self._get_policy(message.channel.id)
         if not policy:
