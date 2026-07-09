@@ -658,15 +658,6 @@ class ChannelPolicy(commands.Cog):
             except Exception:
                 pass
 
-        # ── Log ──
-        active_modes = " + ".join(f"`{m}`" for m in policy.get("modes", []))
-        await self._log_event(
-            message.guild, "🚫 Policy Violation",
-            f"**{message.author.mention}** violated the {active_modes} policy in {message.channel.mention}\n"
-            f"**Reason:** {violation}",
-            discord.Color.red(), message.author,
-        )
-
 
 async def setup(client):
     await client.add_cog(ChannelPolicy(client))
