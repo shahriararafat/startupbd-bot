@@ -58,6 +58,26 @@ class Welcome(commands.Cog):
         except Exception as e:
             print(f"Welcome message pathate error: {e}")
 
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        if member.bot:
+            return
+
+        log_channel_id = 1527059217624858684
+        log_channel = self.client.get_channel(log_channel_id)
+        if log_channel is None:
+            try:
+                log_channel = await self.client.fetch_channel(log_channel_id)
+            except Exception as e:
+                print(f"Error fetching log channel: {e}")
+                return
+
+        if log_channel:
+            try:
+                await log_channel.send(f"{member.mention} left")
+            except Exception as e:
+                print(f"Error sending leave log message: {e}")
+
 
 async def setup(client):
     await client.add_cog(Welcome(client))
