@@ -130,3 +130,7 @@ Mentors publish weekly availability via /officehours availability.
 Founders run /officehours book @mentor and select an available time slot from a dynamic dropdown menu.
 Interactive Actions:
 Exactly 10 minutes before the booked time, the bot automatically spawns a private ☕ Office Hours voice & text room, pings both parties with their agenda, and archives the room once the session finishes.
+
+
+
+
