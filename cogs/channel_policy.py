@@ -11,7 +11,8 @@ import datetime
 # Configuration
 # ─────────────────────────────────────────────────
 PRIMARY_FOUNDER_ID = 759445506426142781
-LOG_CHANNEL_NAME = "punishment-log"
+MOD_LOG_CHANNEL_ID = int(os.getenv("ADMIN_LOG_CHANNEL_ID", "1416150628064956548"))
+LOG_CHANNEL_NAME = "mod-log"
 
 # URL detection pattern
 URL_PATTERN = re.compile(r'https?://\S+', re.IGNORECASE)
@@ -188,13 +189,43 @@ class ChannelPolicy(commands.Cog):
         self._save_db()
 
     # ─────────────────────────────────
-    # Logging helper
+    # Logging helpers
     # ─────────────────────────────────
+    async def _get_log_channel(self, guild: discord.Guild | None = None) -> discord.TextChannel | None:
+        """Fetches the designated mod log channel (1416150628064956548) by ID or name fallback."""
+        # 1. Bot client cache by ID
+        channel = self.client.get_channel(MOD_LOG_CHANNEL_ID)
+        if isinstance(channel, discord.TextChannel):
+            return channel
+
+        # 2. Guild cache by ID
+        if guild:
+            guild_channel = guild.get_channel(MOD_LOG_CHANNEL_ID)
+            if isinstance(guild_channel, discord.TextChannel):
+                return guild_channel
+
+        # 3. Discord API fetch by ID
+        try:
+            fetched_channel = await self.client.fetch_channel(MOD_LOG_CHANNEL_ID)
+            if isinstance(fetched_channel, discord.TextChannel):
+                return fetched_channel
+        except Exception:
+            pass
+
+        # 4. Fallback search by common names
+        if guild:
+            for name in ["mod-log", "mod-logs", "admin-log", "admin-logs", "punishment-log", "moderation-log"]:
+                ch = discord.utils.get(guild.text_channels, name=name)
+                if ch:
+                    return ch
+
+        return None
+
     async def _log_event(self, guild: discord.Guild, action: str, description: str,
                          color: discord.Color, user: discord.Member | discord.User | None = None):
-        log_channel = discord.utils.get(guild.channels, name=LOG_CHANNEL_NAME)
+        log_channel = await self._get_log_channel(guild)
         if not log_channel:
-            print(f"[ChannelPolicy] Log channel '{LOG_CHANNEL_NAME}' not found in {guild.name}.")
+            print(f"[ChannelPolicy] Log channel ({MOD_LOG_CHANNEL_ID}) not found in {guild.name}.")
             return
 
         embed = discord.Embed(
@@ -212,6 +243,118 @@ class ChannelPolicy(commands.Cog):
             await log_channel.send(embed=embed)
         except Exception as e:
             print(f"[ChannelPolicy] Failed to send log: {e}")
+
+    async def _log_message_deletion(
+        self,
+        message: discord.Message,
+        action: str,
+        rule_violated: str,
+        violation_reason: str,
+        color: discord.Color = discord.Color.orange()
+    ):
+        """Sends a detailed evidence log to mod-log channel when a message is auto-deleted."""
+        try:
+            log_channel = await self._get_log_channel(message.guild)
+            if not log_channel:
+                print(f"[ChannelPolicy] Mod-log channel ({MOD_LOG_CHANNEL_ID}) not found.")
+                return
+
+            author = message.author
+            timestamp = message.created_at or datetime.datetime.now(datetime.timezone.utc)
+            ts_unix = int(timestamp.timestamp())
+
+            embed = discord.Embed(
+                title=f"🛡️ Mod Log | {action}",
+                color=color,
+                timestamp=timestamp
+            )
+
+            if author.display_avatar:
+                embed.set_author(
+                    name=f"{author.name} (ID: {author.id})",
+                    icon_url=author.display_avatar.url
+                )
+                embed.set_thumbnail(url=author.display_avatar.url)
+            else:
+                embed.set_author(name=f"{author.name} (ID: {author.id})")
+
+            # 1. User Information
+            user_info = (
+                f"• **User:** {author.mention}\n"
+                f"• **Username:** `@{author.name}`\n"
+                f"• **Display Name:** `{author.display_name}`\n"
+                f"• **User ID:** `{author.id}`"
+            )
+            embed.add_field(name="👤 User Information", value=user_info, inline=True)
+
+            # 2. Channel Information
+            channel_info = (
+                f"• **Channel:** {message.channel.mention}\n"
+                f"• **Name:** `#{message.channel.name}`\n"
+                f"• **Channel ID:** `{message.channel.id}`"
+            )
+            embed.add_field(name="📍 Channel Information", value=channel_info, inline=True)
+
+            # 3. Enforcement Details
+            action_info = (
+                f"• **Action Taken:** `Message Auto-Deleted`\n"
+                f"• **Rule Violated:** **{rule_violated}**\n"
+                f"• **Violation Details:** {violation_reason}"
+            )
+            embed.add_field(name="⚠️ Enforcement Details", value=action_info, inline=False)
+
+            # 4. Original Message (Evidence)
+            raw_content = message.content if (message.content and message.content.strip()) else "*[No text content - message contained only attachment(s) or embed]*"
+            safe_content = raw_content.replace("```", "`\u200b`\u200b`")
+
+            if len(safe_content) <= 1000:
+                embed.add_field(
+                    name="💬 Original Deleted Message (Evidence)",
+                    value=f"```{safe_content}```",
+                    inline=False
+                )
+            else:
+                chunks = [safe_content[i:i+1000] for i in range(0, len(safe_content), 1000)]
+                for idx, chunk in enumerate(chunks, 1):
+                    embed.add_field(
+                        name=f"💬 Original Deleted Message (Part {idx})",
+                        value=f"```{chunk}```",
+                        inline=False
+                    )
+
+            # 5. Attachments
+            if message.attachments:
+                att_lines = [
+                    f"• [{att.filename}]({att.url}) (`{att.size / 1024:.1f} KB`)"
+                    for att in message.attachments
+                ]
+                embed.add_field(
+                    name="📎 Message Attachments",
+                    value="\n".join(att_lines)[:1024],
+                    inline=False
+                )
+
+            # 6. Timestamp & Jump Link
+            embed.add_field(
+                name="🕒 Timestamp",
+                value=f"<t:{ts_unix}:F>\n(<t:{ts_unix}:R>)",
+                inline=True
+            )
+            embed.add_field(
+                name="🔗 Message Reference",
+                value=f"[Jump to Message Location]({message.jump_url})\n*(Original message removed)*",
+                inline=True
+            )
+
+            embed.set_footer(
+                text=f"Startup Bangladesh Bot • Mod Log • User ID: {author.id}",
+                icon_url=self.client.user.display_avatar.url if (self.client.user and self.client.user.display_avatar) else None
+            )
+
+            await log_channel.send(embed=embed)
+            print(f"[ChannelPolicy] Mod log sent to #{log_channel.name} ({log_channel.id}) for deleted message from {author.name}.")
+        except Exception as e:
+            print(f"[ChannelPolicy] Failed to send mod log: {e}")
 
     # ─────────────────────────────────
     # Content detection helpers
@@ -632,6 +775,14 @@ class ChannelPolicy(commands.Cog):
                 )
             except Exception:
                 pass
+
+            await self._log_message_deletion(
+                message=message,
+                action="Message Removed (Dedicated Profile Channel)",
+                rule_violated="Command-Only Channel Policy",
+                violation_reason="Sent a regular message in <#1416508832775012497>. Only `/profile`, `/setprofile`, and `/deleteprofile` commands are permitted.",
+                color=discord.Color.gold(),
+            )
             return
 
         # --- Check if channel has a policy ---
@@ -673,6 +824,15 @@ class ChannelPolicy(commands.Cog):
                 )
             except Exception:
                 pass
+
+        # ── Send Mod Log ──
+        await self._log_message_deletion(
+            message=message,
+            action="Message Removed (Channel Policy Violation)",
+            rule_violated="Channel Content Policy Violation",
+            violation_reason=violation,
+            color=discord.Color.orange(),
+        )
 
 
 async def setup(client):
